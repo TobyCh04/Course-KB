@@ -15,3 +15,10 @@ venv/
 *.jpg
 *.jpeg
 data/*.json
+
+# External SimpleCADAPI test inputs belong in the sibling SimpleCADAPI project
+test_models/
+
+# Generated validation artifacts
+test_runs/
+formula_comparison.html
