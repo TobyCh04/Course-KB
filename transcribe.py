@@ -2,8 +2,14 @@ import sys
 import os
 import argparse
 import base64
-import json
-import urllib.request
+import tempfile
+
+try:
+    from scripts.common_client import JsonHttpClient
+except ImportError:  # pragma: no cover - direct script import
+    from common_client import JsonHttpClient
+
+_OLLAMA_CLIENT = JsonHttpClient(timeout=120, retries=2)
 
 # Add NVIDIA DLL dirs for faster-whisper
 nvidia_base = os.path.join(os.path.dirname(os.__file__), "site-packages", "nvidia")
@@ -20,15 +26,38 @@ if os.path.exists(nvidia_base):
 
 DEFAULT_OUTPUT_DIR = r"C:\Users\31163\shared\Grad\Lecture Audio"
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
+_MODEL_CACHE = {}
+
+
+def clear_model_cache():
+    """Release cached model references; useful for callers and offline tests."""
+    _MODEL_CACHE.clear()
+
+
+def _load_whisper_model(model_size, device, compute_type):
+    from faster_whisper import WhisperModel
+    return WhisperModel(model_size, device=device, compute_type=compute_type)
 
 
 # ── Whisper (fast, primary for single-speaker lectures) ──────────────────────
 
-def transcribe_whisper(audio_path, output_path, model_size="large-v3-turbo"):
-    from faster_whisper import WhisperModel
-
-    print(f"[Whisper] Loading model {model_size}...")
-    model = WhisperModel(model_size, device="cuda", compute_type="float16")
+def transcribe_whisper(
+    audio_path, output_path, model_size="large-v3-turbo", *,
+    device=None, compute_type=None, model_loader=None, reuse_model=True,
+):
+    """Transcribe audio with a configurable, process-reusable Whisper model."""
+    device = device or os.environ.get("CORNELL_KB_WHISPER_DEVICE", "cuda")
+    compute_type = compute_type or os.environ.get("CORNELL_KB_WHISPER_COMPUTE_TYPE", "float16")
+    model_loader = model_loader or _load_whisper_model
+    cache_key = ("whisper", model_size, device, compute_type, id(model_loader))
+    model = _MODEL_CACHE.get(cache_key) if reuse_model else None
+    if model is None:
+        print(f"[Whisper] Loading model {model_size} (device={device}, compute_type={compute_type})...")
+        model = model_loader(model_size, device, compute_type)
+        if reuse_model:
+            _MODEL_CACHE[cache_key] = model
+    else:
+        print(f"[Whisper] Reusing model {model_size} (device={device}, compute_type={compute_type})...")
 
     print(f"[Whisper] Transcribing {audio_path}...")
     segments, info = model.transcribe(audio_path, beam_size=5, language="en")
@@ -48,7 +77,10 @@ def transcribe_whisper(audio_path, output_path, model_size="large-v3-turbo"):
 
 # ── MOSS (diarization, for multi-speaker recordings) ─────────────────────────
 
-def transcribe_moss(audio_path, output_path):
+DEFAULT_MOSS_MODEL = "OpenMOSS-Team/MOSS-Transcribe-Diarize"
+
+
+def _load_moss_runtime(model_id, device_preference):
     import torch
     from transformers import AutoModelForCausalLM, AutoProcessor
     from moss_transcribe_diarize import parse_transcript
@@ -58,16 +90,34 @@ def transcribe_moss(audio_path, output_path):
         resolve_device,
     )
 
-    model_id = "OpenMOSS-Team/MOSS-Transcribe-Diarize"
-    device = resolve_device("auto")
+    device = resolve_device(device_preference)
     dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
-
-    print(f"[MOSS] Loading model (device={device}, dtype={dtype})...")
     model = AutoModelForCausalLM.from_pretrained(
         model_id, trust_remote_code=True, dtype="auto"
     ).to(dtype=dtype, device=device).eval()
-
     processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+    return model, processor, device, dtype, parse_transcript, build_transcription_messages, generate_transcription
+
+
+def transcribe_moss(
+    audio_path, output_path, *, model_id=None, device_preference=None,
+    model_loader=None, reuse_model=True,
+):
+    """Transcribe multi-speaker audio with a process-reusable MOSS runtime."""
+    model_id = model_id or os.environ.get("CORNELL_KB_MOSS_MODEL", DEFAULT_MOSS_MODEL)
+    device_preference = device_preference or os.environ.get("CORNELL_KB_MOSS_DEVICE", "auto")
+    model_loader = model_loader or _load_moss_runtime
+    cache_key = ("moss", model_id, device_preference, id(model_loader))
+    runtime = _MODEL_CACHE.get(cache_key) if reuse_model else None
+    if runtime is None:
+        print(f"[MOSS] Loading model {model_id} (device={device_preference})...")
+        runtime = model_loader(model_id, device_preference)
+        if reuse_model:
+            _MODEL_CACHE[cache_key] = runtime
+    else:
+        print(f"[MOSS] Reusing model {model_id} (device={device_preference})...")
+
+    model, processor, device, dtype, parse_transcript, build_transcription_messages, generate_transcription = runtime
 
     print(f"[MOSS] Transcribing {audio_path}...")
     messages = build_transcription_messages(audio_path)
@@ -89,8 +139,12 @@ def transcribe_moss(audio_path, output_path):
 
 # ── Vision OCR (GLM-OCR primary, Qwen3-VL fallback) ─────────────────────────
 
-def ocr_image(image_path, engine="glm-ocr", prompt=None):
-    """OCR a single image via Ollama. Returns extracted text."""
+def _ollama_transport(payload, ollama_url, timeout):
+    return _OLLAMA_CLIENT.post_json(ollama_url, payload, timeout=timeout)
+
+
+def ocr_image(image_path, engine="glm-ocr", prompt=None, ollama_url=OLLAMA_URL, transport=None):
+    """OCR one image via an injectable Ollama transport. Returns extracted text."""
     with open(image_path, "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode()
 
@@ -100,22 +154,22 @@ def ocr_image(image_path, engine="glm-ocr", prompt=None):
         else:
             prompt = "Read all text in this image. Output the text exactly as written, preserving formatting, line breaks, and structure."
 
-    payload = json.dumps({
+    payload = {
         "model": engine,
         "prompt": prompt,
         "images": [img_b64],
         "stream": False,
-    }).encode()
-
-    req = urllib.request.Request(OLLAMA_URL, data=payload, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        result = json.loads(resp.read())
+    }
+    result = (transport or _ollama_transport)(payload, ollama_url, 120)
 
     return result.get("response", "")
 
 
-def ocr_pdf(pdf_path, output_path, engine="glm-ocr", fallback_engine="qwen3-vl:8b"):
-    """OCR a PDF using pymupdf for digital text detection + vision model for scanned pages."""
+def ocr_pdf(
+    pdf_path, output_path, engine="glm-ocr", fallback_engine="qwen3-vl:8b", *,
+    ocr_func=None, render_dpi=150, temp_root=None, ollama_url=OLLAMA_URL, transport=None,
+):
+    """OCR a PDF, rendering scans at 150 DPI in a run-specific temp directory."""
     import pymupdf
 
     doc = pymupdf.open(pdf_path)
@@ -123,53 +177,44 @@ def ocr_pdf(pdf_path, output_path, engine="glm-ocr", fallback_engine="qwen3-vl:8
     print(f"[OCR] Processing {total_pages} pages from {pdf_path}")
 
     all_text = []
-    for page_num in range(total_pages):
-        page = doc[page_num]
+    ocr_func = ocr_func or ocr_image
+    try:
+        with tempfile.TemporaryDirectory(prefix="cornell_kb_ocr_", dir=temp_root) as temp_dir:
+            for page_num in range(total_pages):
+                page = doc[page_num]
 
-        # Check if page has digital text
-        text_dict = page.get_text("dict")
-        text_blocks = [b for b in text_dict["blocks"] if b.get("type") == 0 and b.get("text", "").strip()]
+                # Check if page has digital text
+                text_dict = page.get_text("dict")
+                text_blocks = [b for b in text_dict["blocks"] if b.get("type") == 0 and b.get("text", "").strip()]
 
-        if text_blocks:
-            # Digital text — use pymupdf
-            text = page.get_text()
-            print(f"  Page {page_num+1}: digital text ({len(text)} chars)")
-            all_text.append(f"--- Page {page_num+1} (digital) ---\n{text}")
-        else:
-            # Scanned/image — use OCR
-            # Check image coverage
-            images = page.get_images(full=True)
-            page_area = page.rect.width * page.rect.height
-            is_scanned = len(images) > 0  # Has images, no text
+                if text_blocks:
+                    text = page.get_text()
+                    print(f"  Page {page_num+1}: digital text ({len(text)} chars)")
+                    all_text.append(f"--- Page {page_num+1} (digital) ---\n{text}")
+                    continue
 
-            if is_scanned:
-                # Render page to image
-                pix = page.get_pixmap(dpi=200)
-                img_path = os.path.join(os.environ.get("TEMP", "/tmp"), f"page_{page_num+1}.png")
-                pix.save(img_path)
+                images = page.get_images(full=True)
+                if images:
+                    img_path = os.path.join(temp_dir, f"page_{page_num+1}.png")
+                    page.get_pixmap(dpi=render_dpi).save(img_path)
 
-                print(f"  Page {page_num+1}: scanning with {engine}...")
-                try:
-                    text = ocr_image(img_path, engine=engine)
-                except Exception as e:
-                    print(f"    {engine} failed ({e}), trying {fallback_engine}...")
+                    print(f"  Page {page_num+1}: scanning with {engine} at {render_dpi} DPI...")
+                    used_engine = engine
                     try:
-                        text = ocr_image(img_path, engine=fallback_engine)
-                    except Exception as e2:
-                        print(f"    {fallback_engine} also failed: {e2}")
-                        text = "[OCR FAILED]"
-
-                all_text.append(f"--- Page {page_num+1} (OCR: {engine}) ---\n{text}")
-
-                # Cleanup temp image
-                try:
-                    os.remove(img_path)
-                except:
-                    pass
-            else:
-                all_text.append(f"--- Page {page_num+1} (empty) ---")
-
-    doc.close()
+                        text = ocr_func(img_path, engine=engine, ollama_url=ollama_url, transport=transport)
+                    except Exception as e:
+                        print(f"    {engine} failed ({e}), trying {fallback_engine}...")
+                        used_engine = fallback_engine
+                        try:
+                            text = ocr_func(img_path, engine=fallback_engine, ollama_url=ollama_url, transport=transport)
+                        except Exception as e2:
+                            print(f"    {fallback_engine} also failed: {e2}")
+                            text = "[OCR FAILED]"
+                    all_text.append(f"--- Page {page_num+1} (OCR: {used_engine}) ---\n{text}")
+                else:
+                    all_text.append(f"--- Page {page_num+1} (empty) ---")
+    finally:
+        doc.close()
 
     full_text = "\n\n".join(all_text)
 
@@ -186,9 +231,9 @@ def ocr_pdf(pdf_path, output_path, engine="glm-ocr", fallback_engine="qwen3-vl:8
 
 # ── Vision backup (Qwen3-VL for hard tasks) ──────────────────────────────────
 
-def vision_analyze(image_path, prompt="Describe what you see in this image in detail."):
+def vision_analyze(image_path, prompt="Describe what you see in this image in detail.", ollama_url=OLLAMA_URL, transport=None):
     """Use Qwen3-VL for general vision tasks (not OCR-specific)."""
-    return ocr_image(image_path, engine="qwen3-vl:8b", prompt=prompt)
+    return ocr_image(image_path, engine="qwen3-vl:8b", prompt=prompt, ollama_url=ollama_url, transport=transport)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -208,7 +253,8 @@ def _save_output(lines, audio_path, output_path, header=""):
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
+def build_parser():
+    """Build the stable CLI parser so callers can inspect/configure it offline."""
     parser = argparse.ArgumentParser(description="Transcribe audio or OCR documents")
     sub = parser.add_subparsers(dest="command")
 
@@ -218,37 +264,63 @@ if __name__ == "__main__":
     t.add_argument("output", nargs="?", default=None, help="Output file path")
     t.add_argument("--engine", choices=["whisper", "moss"], default="whisper")
     t.add_argument("--model", default="large-v3-turbo", help="Whisper model size")
+    t.add_argument("--device", default=None, help="Whisper device (default: CORNELL_KB_WHISPER_DEVICE or cuda)")
+    t.add_argument("--compute-type", default=None, help="Whisper compute type (default: CORNELL_KB_WHISPER_COMPUTE_TYPE or float16)")
+    t.add_argument("--no-model-cache", dest="reuse_model", action="store_false", default=True, help="Load a fresh model for this run")
+    t.add_argument("--moss-model", default=None, help="MOSS model id (default: CORNELL_KB_MOSS_MODEL)")
+    t.add_argument("--moss-device", default=None, help="MOSS device preference (default: CORNELL_KB_MOSS_DEVICE or auto)")
 
     # ocr command
     o = sub.add_parser("ocr", help="OCR a PDF or image")
     o.add_argument("input", help="Path to PDF or image file")
     o.add_argument("output", nargs="?", default=None, help="Output file path")
     o.add_argument("--engine", default="glm-ocr", help="OCR engine (glm-ocr or qwen3-vl:8b)")
+    o.add_argument("--fallback-engine", default="qwen3-vl:8b", help="Fallback OCR engine when the primary fails")
+    o.add_argument("--dpi", type=int, default=150, help="DPI for scanned PDF pages (default: 150)")
+    o.add_argument("--ollama-url", default=os.environ.get("CORNELL_KB_OLLAMA_URL", OLLAMA_URL), help="Ollama generate endpoint")
 
     # vision command
     v = sub.add_parser("vision", help="Analyze an image with Qwen3-VL")
     v.add_argument("image", help="Path to image file")
     v.add_argument("--prompt", default="Describe what you see in this image in detail.")
+    v.add_argument("--ollama-url", default=os.environ.get("CORNELL_KB_OLLAMA_URL", OLLAMA_URL), help="Ollama generate endpoint")
+    return parser
 
-    args = parser.parse_args()
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
 
     if args.command == "transcribe":
         if args.engine == "whisper":
-            transcribe_whisper(args.audio, args.output, args.model)
+            transcribe_whisper(
+                args.audio, args.output, args.model, device=args.device,
+                compute_type=args.compute_type, reuse_model=args.reuse_model,
+            )
         elif args.engine == "moss":
-            transcribe_moss(args.audio, args.output)
+            transcribe_moss(
+                args.audio, args.output, model_id=args.moss_model,
+                device_preference=args.moss_device, reuse_model=args.reuse_model,
+            )
     elif args.command == "ocr":
         if args.input.lower().endswith(".pdf"):
-            ocr_pdf(args.input, args.output, engine=args.engine)
+            ocr_pdf(
+                args.input, args.output, engine=args.engine,
+                fallback_engine=args.fallback_engine, render_dpi=args.dpi,
+                ollama_url=args.ollama_url,
+            )
         else:
-            text = ocr_image(args.input, engine=args.engine)
+            text = ocr_image(args.input, engine=args.engine, ollama_url=args.ollama_url)
             print(text)
             if args.output:
                 with open(args.output, "w", encoding="utf-8") as f:
                     f.write(text)
                 print(f"\nSaved to {args.output}")
     elif args.command == "vision":
-        text = vision_analyze(args.image, args.prompt)
+        text = vision_analyze(args.image, args.prompt, ollama_url=args.ollama_url)
         print(text)
     else:
-        parser.print_help()
+        build_parser().print_help()
+
+
+if __name__ == "__main__":
+    main()

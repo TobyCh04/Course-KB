@@ -11,11 +11,19 @@ Usage:
 
 import argparse
 import base64
+import hashlib
+import io
 import json
 import os
 import sys
 import tempfile
-import urllib.request
+
+try:
+    from .common_client import JsonHttpClient
+except ImportError:  # pragma: no cover - direct script execution
+    from common_client import JsonHttpClient
+
+_OLLAMA_CLIENT = JsonHttpClient(timeout=180, retries=2)
 
 OLLAMA_URL = "http://100.104.205.105:11434/api/generate"
 VISION_MODEL = "qwen3-vl:8b"
@@ -31,68 +39,100 @@ DIAGRAM_PROMPTS = {
 }
 
 
-def detect_diagram_type(image_path, ollama_url=OLLAMA_URL, model=VISION_MODEL):
-    """Use vision model to classify the diagram type."""
-    with open(image_path, "rb") as f:
-        img_b64 = base64.b64encode(f.read()).decode()
-
-    prompt = "Classify this image into ONE of these categories: block_diagram, flowchart, circuit, graph, equation, matlab, general. Reply with ONLY the category name."
-
-    payload = json.dumps({
-        "model": model,
-        "prompt": prompt,
-        "images": [img_b64],
-        "stream": False,
-        "options": {"temperature": 0.0, "num_predict": 20}
-    }).encode()
-
-    req = urllib.request.Request(ollama_url, data=payload, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        result = json.loads(resp.read())
-
-    response = result.get("response", "").strip().lower()
-    # Extract just the category
-    for category in DIAGRAM_PROMPTS:
-        if category in response:
-            return category
-    return "general"
+def _ollama_transport(payload, ollama_url, timeout):
+    """Send one non-streaming generation request; injectable for offline tests."""
+    return _OLLAMA_CLIENT.post_json(ollama_url, payload, timeout=timeout)
 
 
-def describe_diagram(image_path, diagram_type=None, ollama_url=OLLAMA_URL, model=VISION_MODEL):
-    """Generate a structured description of a diagram using vision model."""
-    # Resize if too large (Ollama has ~20MB image limit)
+def _encode_image(image_path, max_dim=2048):
+    """Return an image as base64, resizing in memory instead of creating temp files."""
     from PIL import Image
-    img = Image.open(image_path)
-    max_dim = 2048
-    if img.width > max_dim or img.height > max_dim:
+
+    with Image.open(image_path) as img:
+        if img.width <= max_dim and img.height <= max_dim:
+            with open(image_path, "rb") as f:
+                return base64.b64encode(f.read()).decode()
         ratio = min(max_dim / img.width, max_dim / img.height)
-        new_size = (int(img.width * ratio), int(img.height * ratio))
-        img = img.resize(new_size, Image.LANCZOS)
-        resized_path = image_path.replace(".png", "_resized.png")
-        img.save(resized_path, "PNG")
-        image_path = resized_path
+        resized = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
+        buffer = io.BytesIO()
+        resized.save(buffer, "PNG")
+        return base64.b64encode(buffer.getvalue()).decode()
 
-    with open(image_path, "rb") as f:
-        img_b64 = base64.b64encode(f.read()).decode()
 
-    if diagram_type is None:
-        diagram_type = detect_diagram_type(image_path, ollama_url, model)
+def _parse_diagram_response(response, fallback_type="general"):
+    """Parse the structured response, while tolerating models that add prose/code fences."""
+    text = (response or "").strip()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        start, end = text.find("{"), text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                parsed = {}
+        else:
+            parsed = {}
+    diagram_type = parsed.get("diagram_type", fallback_type)
+    if diagram_type not in DIAGRAM_PROMPTS:
+        diagram_type = fallback_type if fallback_type in DIAGRAM_PROMPTS else "general"
+    return str(parsed.get("description") or text), diagram_type
 
-    prompt = DIAGRAM_PROMPTS.get(diagram_type, DIAGRAM_PROMPTS["general"])
 
-    payload = json.dumps({
+def analyze_diagram(image_path, ollama_url=OLLAMA_URL, model=VISION_MODEL, transport=None):
+    """Classify and describe a diagram in a single vision-model request.
+
+    ``transport`` receives ``(payload, ollama_url, timeout)`` and returns the
+    decoded Ollama response, making this path deterministic and network-free in
+    tests.
+    """
+    transport = transport or _ollama_transport
+    prompt = (
+        "Analyze this technical image once. Reply with ONLY JSON in this exact "
+        "shape: {\"diagram_type\": \"one of block_diagram, flowchart, circuit, "
+        "graph, equation, matlab, general\", \"description\": \"detailed "
+        "description including visible text, labels, values, equations, components, "
+        "and relationships\"}."
+    )
+    payload = {
         "model": model,
         "prompt": prompt,
-        "images": [img_b64],
+        "images": [_encode_image(image_path)],
         "stream": False,
-        "options": {"temperature": 0.1, "num_predict": 1024}
-    }).encode()
+        "options": {"temperature": 0.1, "num_predict": 1024},
+    }
+    result = transport(payload, ollama_url, 180)
+    return _parse_diagram_response(result.get("response", ""))
 
-    req = urllib.request.Request(ollama_url, data=payload, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        result = json.loads(resp.read())
 
-    return result.get("response", ""), diagram_type
+def detect_diagram_type(image_path, ollama_url=OLLAMA_URL, model=VISION_MODEL, transport=None):
+    """Compatibility helper; uses the same one-pass structured vision response."""
+    _, diagram_type = analyze_diagram(image_path, ollama_url, model, transport)
+    return diagram_type
+
+
+def describe_diagram(image_path, diagram_type=None, ollama_url=OLLAMA_URL, model=VISION_MODEL, transport=None):
+    """Generate a description and type in one vision call (``diagram_type`` is legacy)."""
+    description, detected_type = analyze_diagram(image_path, ollama_url, model, transport)
+    return description, detected_type if diagram_type is None else diagram_type
+
+
+def deduplicate_extracted_images(images):
+    """Keep the first extracted image for each identical byte sequence."""
+    unique_images = []
+    fingerprints = set()
+    for image in images:
+        try:
+            with open(image[2], "rb") as f:
+                fingerprint = hashlib.sha256(f.read()).digest()
+        except OSError:
+            # Let the later processing step report an unavailable file normally.
+            unique_images.append(image)
+            continue
+        if fingerprint not in fingerprints:
+            fingerprints.add(fingerprint)
+            unique_images.append(image)
+    return unique_images
 
 
 def extract_images_from_pdf(pdf_path, output_dir=None):
@@ -104,78 +144,67 @@ def extract_images_from_pdf(pdf_path, output_dir=None):
 
     doc = pymupdf.open(pdf_path)
     images = []
+    try:
+        for page_num in range(len(doc)):
+            page = doc[page_num]
 
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-
-        # Check if page has text blocks (digital text)
-        text_dict = page.get_text("dict")
-        text_blocks = [b for b in text_dict["blocks"] if b.get("type") == 0 and b.get("text", "").strip()]
-        image_blocks = [b for b in text_dict["blocks"] if b.get("type") == 1]
-
-        # Extract embedded images
-        page_images = page.get_images(full=True)
-        for img_index, img in enumerate(page_images):
-            xref = img[0]
-            try:
-                pix = pymupdf.Pixmap(doc, xref)
-                # Skip tiny images (icons, decorations)
-                if pix.width < 100 or pix.height < 100:
-                    continue
-                img_path = os.path.join(output_dir, f"page{page_num+1}_img{img_index+1}.png")
+            # A scanned page is represented by its full-page render only. This
+            # prevents the embedded scan and the render from being ingested twice.
+            text_dict = page.get_text("dict")
+            text_blocks = [b for b in text_dict["blocks"] if b.get("type") == 0 and b.get("text", "").strip()]
+            image_blocks = [b for b in text_dict["blocks"] if b.get("type") == 1]
+            page_images = page.get_images(full=True)
+            if not text_blocks and (page_images or image_blocks):
+                pix = page.get_pixmap(dpi=150)
+                img_path = os.path.join(output_dir, f"page{page_num+1}_full.png")
                 pix.save(img_path)
-                images.append((page_num + 1, img_index + 1, img_path))
-            except Exception as e:
-                print(f"  Warning: couldn't extract image {img_index+1} from page {page_num+1}: {e}")
+                images.append((page_num + 1, 0, img_path))
+                continue
 
-        # If page has no text and is likely a scanned diagram, render entire page
-        if not text_blocks and (page_images or image_blocks):
-            pix = page.get_pixmap(dpi=150)
-            img_path = os.path.join(output_dir, f"page{page_num+1}_full.png")
-            pix.save(img_path)
-            images.append((page_num + 1, 0, img_path))  # 0 = full page
+            for img_index, img in enumerate(page_images):
+                xref = img[0]
+                try:
+                    pix = pymupdf.Pixmap(doc, xref)
+                    if pix.width < 100 or pix.height < 100:
+                        continue
+                    img_path = os.path.join(output_dir, f"page{page_num+1}_img{img_index+1}.png")
+                    pix.save(img_path)
+                    images.append((page_num + 1, img_index + 1, img_path))
+                except Exception as e:
+                    print(f"  Warning: couldn't extract image {img_index+1} from page {page_num+1}: {e}")
+    finally:
+        doc.close()
+    return deduplicate_extracted_images(images)
 
-    doc.close()
-    return images
 
-
-def process_pdf_diagrams(pdf_path, course_code, lecture, ollama_url=OLLAMA_URL, model=VISION_MODEL):
-    """Extract and describe all diagrams from a PDF. Returns list of facts."""
+def process_pdf_diagrams(
+    pdf_path, course_code, lecture, ollama_url=OLLAMA_URL, model=VISION_MODEL,
+    extractor=None, transport=None, temp_root=None,
+):
+    """Extract and describe diagrams, always removing a unique run-specific temp dir."""
     print(f"Extracting images from {pdf_path}...")
-    images = extract_images_from_pdf(pdf_path)
-    print(f"Found {len(images)} images")
-
+    extractor = extractor or extract_images_from_pdf
     facts = []
-    for page_num, img_index, img_path in images:
-        label = f"page {page_num}" + (f", image {img_index}" if img_index > 0 else " (full page)")
-        print(f"\nProcessing {label}...")
-
-        try:
-            description, diagram_type = describe_diagram(img_path, ollama_url=ollama_url, model=model)
-            print(f"  Type: {diagram_type}")
-            print(f"  Description: {description[:150]}...")
-
-            facts.append({
-                "content": description,
-                "topic": f"diagram: {diagram_type}",
-                "type": "diagram",
-                "course": course_code,
-                "lecture": lecture,
-                "source_type": "diagram",
-                "diagram_type": diagram_type,
-                "page": page_num,
-                "source_file": os.path.basename(pdf_path),
-                "engine": model,
-            })
-        except Exception as e:
-            print(f"  Error: {e}")
-
-        # Cleanup temp image
-        try:
-            os.remove(img_path)
-        except:
-            pass
-
+    with tempfile.TemporaryDirectory(prefix="cornell_kb_diagrams_", dir=temp_root) as output_dir:
+        images = deduplicate_extracted_images(extractor(pdf_path, output_dir))
+        print(f"Found {len(images)} images")
+        for page_num, img_index, img_path in images:
+            label = f"page {page_num}" + (f", image {img_index}" if img_index > 0 else " (full page)")
+            print(f"\nProcessing {label}...")
+            try:
+                description, diagram_type = describe_diagram(
+                    img_path, ollama_url=ollama_url, model=model, transport=transport
+                )
+                print(f"  Type: {diagram_type}")
+                print(f"  Description: {description[:150]}...")
+                facts.append({
+                    "content": description, "topic": f"diagram: {diagram_type}",
+                    "type": "diagram", "course": course_code, "lecture": lecture,
+                    "source_type": "diagram", "diagram_type": diagram_type,
+                    "page": page_num, "source_file": os.path.basename(pdf_path), "engine": model,
+                })
+            except Exception as e:
+                print(f"  Error: {e}")
     return facts
 
 

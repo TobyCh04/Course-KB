@@ -8,6 +8,44 @@
 
 An AI-powered personal knowledge base for Cornell MEng coursework. Ingests lecture slides, audio transcripts, textbooks, homework, and exams into a Hindsight-powered memory system. Generates structured notes, enables natural language search across all material, and supports active recall through quizzing. Integrates with Obsidian for browsable notes and Hermes for conversational access.
 
+## Media Pipeline Commands and Performance Options
+
+Run commands from the project root. The original command forms remain valid:
+
+```powershell
+python transcribe.py transcribe lecture.mp3
+python transcribe.py transcribe study_group.mp3 --engine moss
+python transcribe.py ocr lecture_notes.pdf
+python transcribe.py vision diagram.png --prompt "explain this"
+python scripts/diagrams.py slides.pdf --course "SYSEN 5100" --lecture 1
+```
+
+### Transcription and OCR configuration
+
+- **Whisper:** use `--device` and `--compute-type` to override CUDA defaults, e.g.
+  `python transcribe.py transcribe lecture.mp3 --device cpu --compute-type int8`.
+  Within a long-lived Python process, identical Whisper model/device/compute settings
+  reuse the loaded model; pass `--no-model-cache` to force a fresh load.
+  Environment equivalents are `CORNELL_KB_WHISPER_DEVICE` and
+  `CORNELL_KB_WHISPER_COMPUTE_TYPE`.
+- **MOSS:** `--engine moss --moss-model <id> --moss-device <preference>` selects a
+  diarization runtime; defaults remain `OpenMOSS-Team/MOSS-Transcribe-Diarize` and
+  `auto`. `CORNELL_KB_MOSS_MODEL` and `CORNELL_KB_MOSS_DEVICE` provide the same
+  configuration, and cached runtimes are reused in-process unless disabled.
+- **Scanned PDFs:** scanned pages render at **150 DPI** by default. Override only
+  when required with `--dpi <value>`. GLM-OCR remains primary and Qwen3-VL remains
+  the fallback: `--engine glm-ocr --fallback-engine qwen3-vl:8b`.
+- **Ollama endpoint:** OCR and `vision` accept `--ollama-url URL`; set
+  `CORNELL_KB_OLLAMA_URL` for a default endpoint. This makes local and remote
+  deployments explicit without changing scripts.
+
+Diagram extraction now asks the vision model for both the category and detailed
+structured description in one request. It represents scanned pages by one full-page
+render, removes duplicate extracted image bytes, and uses a unique temporary directory
+per run that is removed even if processing fails. OCR rendering has the same unique,
+cleaned-up temporary-directory behavior, so concurrent/repeated runs do not share
+`page_N.png` filenames.
+
 ## Phases
 
 ### Phase 1: Core Infrastructure
