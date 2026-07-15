@@ -1,10 +1,11 @@
 courses:
+  # === FALL 2026 (19 credits) ===
+
   SYSEN 5100:
     name: "Model-Based Systems Engineering"
     semester: "Fall 2026"
     credits: 4
     lectures: 28
-    textbook: "Systems Engineering Handbook"
     topics:
       - systems engineering fundamentals
       - requirements analysis
@@ -14,29 +15,95 @@ courses:
       - model-based systems engineering
 
   SYSEN 5930:
-    name: "Systems Engineering Project Management"
+    name: "Project Management and Leadership of Complex Systems"
     semester: "Fall 2026"
-    credits: 3
+    credits: 4
     lectures: 28
     topics:
       - project planning
       - risk management
       - earned value management
-      - agile methods
+      - leadership
       - team dynamics
+      - complex systems management
+
+  SYSEN 5900:
+    name: "Project"
+    semester: "Fall 2026 / Spring 2027"
+    credits: 3
+    lectures: 28
+    topics:
+      - capstone project
+      - systems engineering practice
 
   ORIE 5100:
-    name: "Introduction to Engineering Probability"
+    name: "Manufacturing Systems Design: A Consulting Boot Camp"
     semester: "Fall 2026"
     credits: 4
     lectures: 28
     topics:
-      - probability theory
-      - random variables
-      - distributions
-      - expectation
-      - limit theorems
-      - statistical inference
+      - manufacturing systems design
+      - consulting methodology
+      - process analysis
+      - factory layout
+      - production systems
+
+  SYSEN 6800:
+    name: "Computational Optimization"
+    semester: "Fall 2026"
+    credits: 4
+    lectures: 28
+    topics:
+      - linear programming
+      - integer programming
+      - optimization algorithms
+      - computational methods
+
+  # === SPRING 2027 (20 credits) ===
+
+  SYSEN 5211:
+    name: "Quantitative Methods of Systems Analysis"
+    semester: "Spring 2027"
+    credits: 3
+    lectures: 28
+    topics:
+      - quantitative analysis
+      - systems modeling
+      - statistical methods
+      - decision analysis
+
+  SYSEN 5530:
+    name: "Digital Systems Modeling & Analysis with Generative AI"
+    semester: "Spring 2027"
+    credits: 3
+    lectures: 28
+    topics:
+      - digital systems modeling
+      - generative AI applications
+      - simulation
+      - AI-assisted analysis
+
+  SYSEN 5410:
+    name: "Cyber-Physical Systems"
+    semester: "Spring 2027"
+    credits: 4
+    lectures: 28
+    topics:
+      - cyber-physical systems
+      - embedded systems
+      - real-time systems
+      - control and computation
+
+  SYSEN 6880:
+    name: "Industrial Big Data Analytics and Machine Learning"
+    semester: "Spring 2027"
+    credits: 4
+    lectures: 28
+    topics:
+      - big data analytics
+      - machine learning
+      - industrial applications
+      - data pipelines
 
   SYSEN 5400:
     name: "Theory and Practice of Systems Architecture"
@@ -49,49 +116,3 @@ courses:
       - concept generation
       - concept selection
       - architecture patterns
-
-  SYSEN 5211:
-    name: "Systems Analysis and Optimization"
-    semester: "Spring 2027"
-    credits: 3
-    lectures: 28
-    topics:
-      - linear programming
-      - integer programming
-      - optimization methods
-      - sensitivity analysis
-
-  SYSEN 6800:
-    name: "Data Science for Systems Engineering"
-    semester: "Spring 2027"
-    credits: 3
-    lectures: 28
-    topics:
-      - machine learning
-      - deep learning
-      - data pipelines
-      - model evaluation
-
-  SYSEN 6888:
-    name: "Deep Learning"
-    semester: "Spring 2027"
-    credits: 3
-    lectures: 28
-    topics:
-      - neural networks
-      - CNNs
-      - RNNs
-      - transformers
-      - generative models
-
-  SYSEN 5530:
-    name: "Foundations of Data Science"
-    semester: "Spring 2027"
-    credits: 3
-    lectures: 28
-    topics:
-      - exploratory data analysis
-      - regression
-      - classification
-      - clustering
-      - dimensionality reduction
