@@ -105,14 +105,3 @@ courses:
       - industrial applications
       - data pipelines
 
-  SYSEN 5400:
-    name: "Theory and Practice of Systems Architecture"
-    semester: "Spring 2027"
-    credits: 3
-    lectures: 28
-    topics:
-      - architecture frameworks
-      - stakeholder needs
-      - concept generation
-      - concept selection
-      - architecture patterns
