@@ -175,3 +175,22 @@ def test_reranker_cannot_escape_namespace():
     )
     for r in result["results"]:
         assert r["uri"].startswith(CORNELL_NAMESPACE)
+
+def test_server_mode_falls_back_when_server_unreachable(monkeypatch):
+    """When --server is set but the server is unreachable, fall back to dense ranking."""
+    def _raising_urlopen(req, timeout=None):
+        raise ConnectionRefusedError("connection refused")
+
+    monkeypatch.setattr(reranker_mod.urllib.request, "urlopen", _raising_urlopen)
+
+    candidates = [
+        {"uri": f"{CORNELL_NAMESPACE}/doc/a", "score": 0.9, "abstract": "alpha"},
+        {"uri": f"{CORNELL_NAMESPACE}/doc/b", "score": 0.7, "abstract": "beta"},
+        {"uri": f"{CORNELL_NAMESPACE}/doc/c", "score": 0.8, "abstract": "gamma"},
+    ]
+    result = reranker_mod.rerank_candidates(
+        "query", candidates, top_k=2, server_url="localhost:9999",
+    )
+    assert len(result) == 2
+    assert result[0]["score"] == 0.9
+    assert "rerank_score" not in result[0]

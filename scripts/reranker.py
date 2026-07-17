@@ -5,9 +5,13 @@ stronger cross-encoder to reorder the top candidates. Falls back to dense
 ranking if the reranker is unavailable or times out.
 
 Usage:
+    # In-process (loads model each call, ~19s overhead)
     python scripts/reranker.py search "feedback stability" --limit 20 --rerank-top 5
-    python scripts/reranker.py search "kanban pull system" --no-rerank  # dense only
     python scripts/reranker.py ab "kanban" --limit 20  # A/B comparison
+
+    # Server mode (model loaded once, <1s per query):
+    #   1. Start the server:  python scripts/reranker_server.py --port 1940
+    #   2. Use with --server: python scripts/reranker.py search "kanban" --server localhost:1940
 
 Default model: BAAI/bge-reranker-base (local, ~278MB, CPU-compatible).
 """
@@ -18,6 +22,8 @@ import argparse
 import json
 import sys
 import time
+import urllib.error
+import urllib.request
 from typing import Any
 
 try:
@@ -29,6 +35,7 @@ DEFAULT_RERANKER_MODEL = "BAAI/bge-reranker-base"
 DEFAULT_OPENVIKING_URL = "http://127.0.0.1:1934"
 DEFAULT_SEARCH_LIMIT = 20
 DEFAULT_RERANK_TOP = 5
+DEFAULT_RERANKER_SERVER = ""  # empty = in-process; set to "host:port" for server mode
 
 # Module-level cache so the model loads once per process.
 _reranker_model: Any = None
@@ -46,6 +53,40 @@ def _get_reranker(model_name: str = DEFAULT_RERANKER_MODEL) -> Any:
     return _reranker_model
 
 
+def _rerank_via_server(
+    query: str,
+    candidates: list[dict[str, Any]],
+    top_k: int,
+    server_url: str,
+    timeout_seconds: float = 30.0,
+) -> list[dict[str, Any]]:
+    """Rerank by POSTing candidates to the persistent reranker server."""
+    payload = json.dumps({
+        "query": query,
+        "candidates": candidates,
+        "top_k": top_k,
+    }, ensure_ascii=False).encode("utf-8")
+
+    url = f"http://{server_url.rstrip('/')}/rerank"
+    req = urllib.request.Request(
+        url, data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        results = data.get("results", [])
+        latency = data.get("latency_ms")
+        if latency is not None:
+            # Attach server-side latency for the caller to use.
+            for r in results:
+                r.setdefault("_server_latency_ms", latency)
+        return results
+    except Exception:
+        # Fallback to dense ranking if server is unreachable.
+        return sorted(candidates, key=lambda c: c.get("score", 0.0), reverse=True)[:top_k]
+
+
 def rerank_candidates(
     query: str,
     candidates: list[dict[str, Any]],
@@ -53,15 +94,18 @@ def rerank_candidates(
     model_name: str = DEFAULT_RERANKER_MODEL,
     top_k: int = DEFAULT_RERANK_TOP,
     timeout_seconds: float = 30.0,
+    server_url: str = "",
 ) -> list[dict[str, Any]]:
     """Rerank OpenViking search results with a cross-encoder.
 
     Args:
         query: The original search query.
         candidates: List of search result dicts with 'uri', 'score', 'abstract'.
-        model_name: HuggingFace cross-encoder model name.
+        model_name: HuggingFace cross-encoder model name (in-process mode only).
         top_k: Number of results to return after reranking.
         timeout_seconds: If reranking exceeds this, fall back to dense ranking.
+        server_url: If non-empty, use the persistent reranker server instead of
+            loading the model in-process (e.g. "localhost:1940").
 
     Returns:
         Reranked list of top_k candidates with added 'rerank_score' field.
@@ -73,6 +117,11 @@ def rerank_candidates(
         # No point reranking if we already have fewer than top_k results.
         return candidates
 
+    # Server mode: delegate to the persistent reranker server.
+    if server_url:
+        return _rerank_via_server(query, candidates, top_k, server_url, timeout_seconds)
+
+    # In-process mode: load the model and score locally.
     try:
         model = _get_reranker(model_name)
         # Build (query, document) pairs for the cross-encoder.
@@ -98,6 +147,7 @@ def search_with_rerank(
     rerank_top: int = DEFAULT_RERANK_TOP,
     model_name: str = DEFAULT_RERANKER_MODEL,
     use_reranker: bool = True,
+    server_url: str = "",
 ) -> dict[str, Any]:
     """Search OpenViking, optionally rerank, return both paths for comparison."""
     raw = backend.search(query, limit=search_limit)
@@ -124,7 +174,8 @@ def search_with_rerank(
     # Rerank
     start = time.monotonic()
     reranked = rerank_candidates(
-        query, candidates, model_name=model_name, top_k=rerank_top
+        query, candidates, model_name=model_name, top_k=rerank_top,
+        server_url=server_url,
     )
     elapsed_ms = round((time.monotonic() - start) * 1000, 1)
 
@@ -144,6 +195,7 @@ def cmd_ab_comparison(
     search_limit: int = DEFAULT_SEARCH_LIMIT,
     rerank_top: int = DEFAULT_RERANK_TOP,
     model_name: str = DEFAULT_RERANKER_MODEL,
+    server_url: str = "",
 ) -> dict[str, Any]:
     """Run dense-only and dense+reranker side by side for comparison."""
     dense_result = search_with_rerank(
@@ -152,7 +204,7 @@ def cmd_ab_comparison(
     )
     rerank_result = search_with_rerank(
         backend, query, search_limit=search_limit, rerank_top=rerank_top,
-        model_name=model_name, use_reranker=True,
+        model_name=model_name, use_reranker=True, server_url=server_url,
     )
 
     # Compare top-k ordering
@@ -197,6 +249,9 @@ def main() -> int:
                         help=f"Cross-encoder model (default {DEFAULT_RERANKER_MODEL})")
     parser.add_argument("--no-rerank", action="store_true",
                         help="Skip reranking, return dense-only results")
+    parser.add_argument("--server", default=DEFAULT_RERANKER_SERVER,
+                        help="Reranker server host:port (e.g. localhost:1940). "
+                             "Empty = load model in-process")
     parser.add_argument("--url", default=DEFAULT_OPENVIKING_URL,
                         help="OpenViking server URL")
     parser.add_argument("--timeout", type=float, default=30,
@@ -212,6 +267,7 @@ def main() -> int:
             rerank_top=args.rerank_top,
             model_name=args.model,
             use_reranker=not args.no_rerank,
+            server_url=args.server,
         )
     elif args.command == "ab":
         result = cmd_ab_comparison(
@@ -219,6 +275,7 @@ def main() -> int:
             search_limit=args.limit,
             rerank_top=args.rerank_top,
             model_name=args.model,
+            server_url=args.server,
         )
     else:
         parser.error(f"Unknown command: {args.command}")
