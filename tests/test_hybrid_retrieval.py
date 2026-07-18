@@ -116,6 +116,28 @@ def test_reciprocal_rank_fusion_merges_chunk_resources_by_canonical_uri():
     assert merged[0]["canonical_uri"] == "viking://resources/cornell-kb/cornell-source/data-abc"
 
 
+def test_canonical_uri_keeps_top_level_resource_filename():
+    uri = f"{CORNELL_NAMESPACE}/step4_note_generator_plan.md"
+    assert hr._canonical_uri(uri) == uri
+
+
+def test_reciprocal_rank_fusion_prefers_richer_abstract_for_reranking():
+    dense = [{
+        "uri": f"{CORNELL_NAMESPACE}/doc-abc/chunk.md",
+        "canonical_uri": f"{CORNELL_NAMESPACE}/doc-abc",
+        "score": 0.9,
+        "abstract": "margin",
+    }]
+    lexical = [{
+        "uri": f"{CORNELL_NAMESPACE}/doc-abc/source.json",
+        "canonical_uri": f"{CORNELL_NAMESPACE}/doc-abc",
+        "score": 0.8,
+        "abstract": "Gain margin is measured at the phase crossover frequency.",
+    }]
+    merged = hr.reciprocal_rank_fusion(dense, lexical)
+    assert merged[0]["abstract"] == lexical[0]["abstract"]
+
+
 def test_dedupe_by_canonical_uri_keeps_highest_scoring_chunk():
     """Multiple chunks from the same source document should collapse to one."""
     results = [
@@ -234,6 +256,32 @@ def test_select_final_sources_uses_stricter_default_fused_drop():
     )
     assert [item["uri"] for item in selected] == ["a", "b"]
     assert cutoff["score_drop"] == 0.005
+
+
+def test_select_final_sources_uses_relative_floor_for_small_reranker_logits():
+    candidates = [
+        {"uri": "a", "rerank_score": 0.0040},
+        {"uri": "b", "rerank_score": 0.0025},
+        {"uri": "c", "rerank_score": 0.0002},
+    ]
+    selected, cutoff = hr.select_final_sources(
+        candidates, default_limit=1, max_sources=3,
+    )
+    assert [item["uri"] for item in selected] == ["a", "b"]
+    assert cutoff["relative_floor"] == 0.08
+    assert cutoff["cutoff_reason"] == "score_drop"
+
+
+def test_select_final_sources_can_return_fewer_than_target_when_scores_drop():
+    candidates = [
+        {"uri": "a", "rerank_score": 0.04},
+        {"uri": "b", "rerank_score": 0.001},
+    ]
+    selected, cutoff = hr.select_final_sources(
+        candidates, default_limit=5, max_sources=8,
+    )
+    assert [item["uri"] for item in selected] == ["a"]
+    assert cutoff["cutoff_reason"] == "score_drop"
 
 
 def test_select_final_sources_never_exceeds_hard_maximum():

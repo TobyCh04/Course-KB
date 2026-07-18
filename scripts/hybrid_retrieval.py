@@ -36,6 +36,7 @@ DEFAULT_TOP_K = 5
 DEFAULT_MAX_SOURCES = 8
 DEFAULT_RERANK_TOP = 20
 DEFAULT_RERANK_SCORE_DROP = 0.15
+DEFAULT_RERANK_RELATIVE_FLOOR = 0.08
 DEFAULT_FUSED_SCORE_DROP = 0.005
 
 
@@ -48,6 +49,10 @@ def _canonical_uri(uri: str) -> str:
     strip the trailing filename to merge them in RRF.
     """
     if not uri:
+        return uri
+    relative = uri.removeprefix(f"{CORNELL_NAMESPACE}/")
+    if "/" not in relative:
+        # A file directly under the namespace is already its own resource.
         return uri
     # Keep everything up to the last "/" — the resource container directory.
     return uri.rsplit("/", 1)[0]
@@ -123,10 +128,21 @@ def reciprocal_rank_fusion(
     # Build a lookup for the best abstract per canonical URI.
     abstracts: dict[str, str] = {}
     levels: dict[str, int] = {}
-    for item in dense_results + lexical_results:
+    for item in dense_results:
         can = item.get("canonical_uri") or item.get("uri", "")
-        if can and can not in abstracts:
-            abstracts[can] = item.get("abstract", "")
+        abstract = item.get("abstract", "") or ""
+        if can and len(abstract) > len(abstracts.get(can, "")):
+            abstracts[can] = abstract
+            levels[can] = item.get("level", 0)
+    for item in lexical_results:
+        can = item.get("canonical_uri") or item.get("uri", "")
+        abstract = item.get("abstract", "") or ""
+        if can and len(abstract) >= len(abstracts.get(can, "")):
+            # Lexical hits often contain the complete source excerpt while
+            # dense hits may expose only a short or OCR-damaged abstract.
+            # Give the reranker the most informative representation; lexical
+            # wins equal-length ties because it is source-text based.
+            abstracts[can] = abstract
             levels[can] = item.get("level", 0)
 
     merged = []
@@ -199,9 +215,12 @@ def select_final_sources(
     max_sources: int = DEFAULT_MAX_SOURCES,
     reranked: bool = True,
     score_drop: float | None = None,
+    relative_floor: float | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Select a bounded source set using a score-drop cutoff.
 
+    ``default_limit`` is a target budget, not a minimum: candidates below the
+    calibrated threshold are excluded even when that returns fewer sources.
     Cross-encoder and RRF scores are on different scales, so the default
     drop is intentionally separate for each. These provisional thresholds are
     returned in the cutoff metadata for later benchmark calibration.
@@ -215,11 +234,19 @@ def select_final_sources(
     )
     if score_drop is None:
         score_drop = DEFAULT_RERANK_SCORE_DROP if score_key == "rerank_score" else DEFAULT_FUSED_SCORE_DROP
+    if relative_floor is None and score_key == "rerank_score":
+        relative_floor = DEFAULT_RERANK_RELATIVE_FLOOR
+    if relative_floor is not None and not 0 < relative_floor <= 1:
+        raise ValueError("relative_floor must be in the range (0, 1]")
     if score_drop < 0:
         raise ValueError("score_drop must be non-negative")
 
     best_score = float(candidates[0].get(score_key, 0.0))
     threshold = best_score - score_drop
+    relative_threshold = None
+    if relative_floor is not None and best_score > 0:
+        relative_threshold = best_score * relative_floor
+        threshold = max(threshold, relative_threshold)
     selected: list[dict[str, Any]] = []
     cutoff_reason = "candidate_limit"
     for candidate in candidates:
@@ -227,7 +254,7 @@ def select_final_sources(
             cutoff_reason = "max_sources"
             break
         score = float(candidate.get(score_key, 0.0))
-        if len(selected) >= default_limit and score < threshold:
+        if selected and score < threshold:
             cutoff_reason = "score_drop"
             break
         selected.append(candidate)
@@ -238,6 +265,8 @@ def select_final_sources(
         "best_score": best_score,
         "score_threshold": threshold,
         "score_drop": score_drop,
+        "relative_floor": relative_floor,
+        "relative_threshold": relative_threshold,
         "cutoff_reason": cutoff_reason,
         "default_limit": default_limit,
         "max_sources": max_sources,
