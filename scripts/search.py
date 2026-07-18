@@ -26,9 +26,11 @@ from typing import Any
 try:
     from .openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
     from .hybrid_retrieval import DEFAULT_MAX_SOURCES, DEFAULT_RERANK_TOP, DEFAULT_TOP_K
+    from .query_orchestrator import execute_planned_query
 except ImportError:  # pragma: no cover - exercised by direct CLI use
     from openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
     from hybrid_retrieval import DEFAULT_MAX_SOURCES, DEFAULT_RERANK_TOP, DEFAULT_TOP_K
+    from query_orchestrator import execute_planned_query
 
 DEFAULT_OPENVIKING_URL = "http://127.0.0.1:1934"
 DEFAULT_LIMIT = 8
@@ -143,6 +145,32 @@ def cmd_hybrid_trace(
             "content": (source["content"] or "")[:2000],
         }
     return result
+
+
+def cmd_planned_hybrid(
+    backend: CornellOpenVikingBackend,
+    query: str,
+    *,
+    planner: Any,
+    index_path: str = DEFAULT_LEXICAL_INDEX_PATH,
+    max_sources: int = DEFAULT_MAX_SOURCES,
+    hindsight_recall: Any = None,
+) -> dict[str, Any]:
+    """Plan with an injected planner, then execute with visible trace.
+
+    ``planner`` must be a ``QueryPlanner`` configured with an LLM callable
+    by the caller (typically the cornell-kb skill, which injects the active
+    Hermes main-model callable). This function does NOT build its own LLM
+    client — that would break OAuth providers and duplicate credential logic.
+    """
+    planning = planner.plan(query)
+    return execute_planned_query(
+        planning,
+        backend,
+        index_path=index_path,
+        max_sources=max_sources,
+        hindsight_recall=hindsight_recall,
+    )
 
 
 def cmd_health(backend: CornellOpenVikingBackend) -> dict[str, Any]:

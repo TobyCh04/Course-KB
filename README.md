@@ -10,7 +10,7 @@
 - **Cornell ingestion safety:** implemented and tested. Audio and raw book binaries are rejected/excluded; the production namespace uses a verified curated allowlist of 17 resources.
 - **Retrieval foundation:** reranking (Step 6.4) and BM25 + dense RRF hybrid retrieval (Step 6.5) are complete. The lexical index has been rebuilt with derived course/lecture/source metadata while preserving OpenViking URI alignment.
 - **Embedding experiments:** EmbeddingGemma A/B completed but was not promoted because the remote tunnel/prefix-proxy path still needs interactive-latency optimization and a held-out benchmark. BGE-large remains paused; BGE-small remains production.
-- **Current step:** Step 6.6 — LLM-enhanced query planning and backend routing. The implementation plan is saved at `.hermes/plans/2026-07-18_053433-step-6-6-llm-enhanced-query.md`. Pre-implementation hardening and tests are in progress; the query planner itself has not been implemented.
+- **Current step:** Step 6.6 — LLM-enhanced query planning and backend routing. Planner contracts, two-attempt current-model planning, validated fallback, execution routing, and trace output are implemented in `scripts/query_models.py`, `scripts/query_planner.py`, and `scripts/query_orchestrator.py`. The installed `cornell-kb` skill invokes planning inside the active Hermes turn via `validate_model_response()`; no separate model client or delegation is used. Remaining: optional read-only live smoke testing.
 
 ## Overview
 
