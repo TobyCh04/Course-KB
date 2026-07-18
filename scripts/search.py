@@ -1,19 +1,19 @@
-"""Cornell KB source-grounded retrieval CLI — /search, /source, /trace.
+"""Cornell KB source-grounded retrieval CLI — /search, /source, /trace, /hybrid.
 
 Usage:
     python scripts/search.py search "feedback stability"
     python scripts/search.py search "kanban" --limit 5
     python scripts/search.py source "viking://resources/cornell-kb/.../SKILL-abc123"
     python scripts/search.py trace "closed-loop transfer function"
+    python scripts/search.py hybrid "kanban" --index-path data/lexical_index.json
+    python scripts/search.py hybrid-trace "SYSEN 6800" --index-path data/lexical_index.json
     python scripts/search.py health
 
-quires the OpenViking SDK (openviking_sdk) and a running OpenViking server
-default port 1934. All search/read operations are namespace-locked to
-ng://resources/cornell-kb.
-   _ __ 
-  | '_ |
-  | .__| 
-  |_|    ions are returned as JSON to stdout for programmatic use.
+Requires the OpenViking SDK (openviking_sdk) and a running OpenViking server
+(default port 1934). All search/read operations are namespace-locked to
+viking://resources/cornell-kb.
+
+Results are returned as JSON to stdout for programmatic use.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ except ImportError:  # pragma: no cover - exercised by direct CLI use
 
 DEFAULT_OPENVIKING_URL = "http://127.0.0.1:1934"
 DEFAULT_LIMIT = 8
+DEFAULT_LEXICAL_INDEX_PATH = "data/lexical_index.json"
 
 
 def _get_backend(base_url: str, timeout: float) -> CornellOpenVikingBackend:
@@ -78,6 +79,65 @@ def cmd_trace(backend: CornellOpenVikingBackend, query: str, limit: int) -> dict
     return search_result
 
 
+def cmd_hybrid(
+    backend: CornellOpenVikingBackend,
+    query: str,
+    *,
+    index_path: str,
+    limit: int,
+    lexical_limit: int,
+    top_k: int,
+    k: int,
+    dense_weight: float,
+    lexical_weight: float,
+    rerank_top: int,
+    rerank_server: str,
+) -> dict[str, Any]:
+    """Search with dense + BM25 lexical fusion."""
+    return backend.hybrid_search(
+        query,
+        index_path=index_path,
+        search_limit=limit,
+        lexical_limit=lexical_limit,
+        top_k=top_k,
+        k=k,
+        dense_weight=dense_weight,
+        lexical_weight=lexical_weight,
+        rerank_top=rerank_top,
+        rerank_server_url=rerank_server,
+    )
+
+
+def cmd_hybrid_trace(
+    backend: CornellOpenVikingBackend,
+    query: str,
+    *,
+    index_path: str,
+    limit: int,
+    lexical_limit: int,
+    top_k: int,
+    k: int,
+    dense_weight: float,
+    lexical_weight: float,
+    read_limit: int,
+) -> dict[str, Any]:
+    """Hybrid search + read the top fused result's source."""
+    result = cmd_hybrid(
+        backend, query,
+        index_path=index_path, limit=limit, lexical_limit=lexical_limit,
+        top_k=top_k, k=k, dense_weight=dense_weight, lexical_weight=lexical_weight,
+        rerank_top=0, rerank_server="",
+    )
+    if result["results"]:
+        top_uri = result["results"][0]["uri"]
+        source = cmd_source(backend, top_uri, read_limit)
+        result["top_source"] = {
+            "uri": top_uri,
+            "content": (source["content"] or "")[:2000],
+        }
+    return result
+
+
 def cmd_health(backend: CornellOpenVikingBackend) -> dict[str, Any]:
     """Check OpenViking server health and namespace accessibility."""
     try:
@@ -107,17 +167,52 @@ def main() -> int:
     )
     parser.add_argument(
         "command",
-        choices=["search", "source", "trace", "health"],
-        help="search: query the index | source: read a URI | trace: search+read top hit | health: check server",
+        choices=["search", "source", "trace", "health", "hybrid", "hybrid-trace"],
+        help=(
+            "search: query the index | source: read a URI | trace: search+read top hit | "
+            "health: check server | hybrid: dense+BM25 fusion | hybrid-trace: hybrid+read top"
+        ),
     )
     parser.add_argument("query", nargs="?", help="Search query or source URI")
-    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="Max results (search/trace)")
-    parser.add_argument("--read-limit", type=int, default=20000, help="Max chars to read (source)")
+    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="Max results (search/trace/hybrid)")
+    parser.add_argument("--read-limit", type=int, default=20000, help="Max chars to read (source/hybrid-trace)")
     parser.add_argument("--url", default=DEFAULT_OPENVIKING_URL, help="OpenViking server URL")
     parser.add_argument("--timeout", type=float, default=30, help="Request timeout in seconds")
+    parser.add_argument(
+        "--index-path", default=DEFAULT_LEXICAL_INDEX_PATH,
+        help="Path to the BM25 lexical index (hybrid commands)",
+    )
+    parser.add_argument(
+        "--lexical-limit", type=int, default=20,
+        help="Number of lexical candidates to retrieve (hybrid commands)",
+    )
+    parser.add_argument(
+        "--top-k", type=int, default=10,
+        help="Results to return after fusion (hybrid commands)",
+    )
+    parser.add_argument(
+        "--rrf-k", type=int, default=60,
+        help="RRF smoothing constant (hybrid commands)",
+    )
+    parser.add_argument(
+        "--dense-weight", type=float, default=1.0,
+        help="Weight for dense ranks in RRF (hybrid commands)",
+    )
+    parser.add_argument(
+        "--lexical-weight", type=float, default=1.0,
+        help="Weight for lexical ranks in RRF (hybrid commands)",
+    )
+    parser.add_argument(
+        "--rerank-top", type=int, default=0,
+        help="If > 0, rerank the top N fused results (hybrid search only)",
+    )
+    parser.add_argument(
+        "--rerank-server", default="",
+        help="Persistent reranker server host:port (hybrid search only)",
+    )
     args = parser.parse_args()
 
-    if args.command in ("search", "source", "trace") and not args.query:
+    if args.command in ("search", "source", "trace", "hybrid", "hybrid-trace") and not args.query:
         parser.error(f"{args.command} requires a query or URI argument")
 
     backend = _get_backend(args.url, args.timeout)
@@ -130,6 +225,31 @@ def main() -> int:
         result = cmd_source(backend, args.query, args.read_limit)
     elif args.command == "trace":
         result = cmd_trace(backend, args.query, args.limit)
+    elif args.command == "hybrid":
+        result = cmd_hybrid(
+            backend, args.query,
+            index_path=args.index_path,
+            limit=args.limit,
+            lexical_limit=args.lexical_limit,
+            top_k=args.top_k,
+            k=args.rrf_k,
+            dense_weight=args.dense_weight,
+            lexical_weight=args.lexical_weight,
+            rerank_top=args.rerank_top,
+            rerank_server=args.rerank_server,
+        )
+    elif args.command == "hybrid-trace":
+        result = cmd_hybrid_trace(
+            backend, args.query,
+            index_path=args.index_path,
+            limit=args.limit,
+            lexical_limit=args.lexical_limit,
+            top_k=args.top_k,
+            k=args.rrf_k,
+            dense_weight=args.dense_weight,
+            lexical_weight=args.lexical_weight,
+            read_limit=args.read_limit,
+        )
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2

@@ -2,7 +2,7 @@
 
 **Status:** EXPERIMENT COMPLETE — EmbeddingGemma A/B tested and not promoted; BGE-small remains the production embedding index; DeepSeek V4 Flash is the active production VLM after a clean gpt5.4mini comparison.
 **Created:** 2026-07-16
-**Last checkpoint:** 2026-07-17 — see `openviking/STATUS.md` and `openviking/test_runs/production_vlm_ab_report.md` for verified experiment results and runtime state.
+**Last checkpoint:** 2026-07-17 10:56:54 -0500 — see `openviking/STATUS.md` and `openviking/test_runs/production_vlm_ab_report.md` for verified experiment results and runtime state.
 **Depends on:** Step 1 (Whisper/MOSS), Step 2 (pymupdf/GLM-OCR/Qwen3-VL), Step 3 (Hindsight metadata and ingestion), Step 4 (lecture note generation)
 
 ---
@@ -20,7 +20,7 @@ Make OpenViking the source-grounded retrieval backend for `cornell-kb`, while re
 - EmbeddingGemma A/B setup is now complete: 768-dimensional GGUF on the RTX 4080 laptop, native CUDA launcher, query/document prefix proxies, 1800-token hard cap, 1600-token parser cap, and isolated OpenViking configs on ports `1936`/`1937`.
 - DeepSeek V4 Flash was tested on the same clean 31-resource manifest as a fresh gpt5.4mini control. DeepSeek had a modest retrieval edge but materially higher VLM token generation; see the A/B report for exact metrics.
 - Staged EmbeddingGemma testing completed: native 768-dimensional embeddings, query/document prefixes, token truncation, isolated startup, DeepSeek summaries, smoke ingestion, full cleaned-corpus ingestion, and an 8-query comparison against production BGE-small.
-- Curated ingestion policy v1 is now enforced for the production Cornell namespace through an explicit allowlist. The approved manifest contains 17 resources: 3 canonical source artifacts and 14 final source-derived Lean notes/skills; raw/project/test/generated material is excluded. Production was checkpointed, rebuilt, and verified with zero queue errors/requeues and zero missing vectors. See `openviking/test_runs/production_curated_policy_ingest_summary.json`.
+- Curated ingestion policy v1 is now enforced for the production Cornell namespace through an explicit allowlist. The approved manifest contains 17 resources: 3 canonical source artifacts and 14 final source-derived Lean notes/skills; raw/project/test/generated material is excluded. Production was checkpointed, rebuilt, and verified with zero queue errors/requeues and zero missing vectors. See `openviking/test_runs/production_curated_policy_ingest_summary.json`. Step 6 is paused pending the remote tunnel/proxy latency gate and held-out benchmark.
 - Root-cause correction verified: the original EmbeddingGemma process did run on CUDA (`25/25` layers offloaded), but `--parallel 1` underused the GPU. The corrected launcher uses `--device CUDA0`, `--parallel 8`, `-c 16384`, `-b 2048`, `-ub 2048`, Flash Attention, and continuous batching.
 - Corrected direct throughput: GPU batch-8 `154.4 vectors/s` versus identical CPU-only `93.9 vectors/s`; GPU batch-32 `155.7 vectors/s` versus CPU `108.0 vectors/s`.
 - The old end-to-end latency comparison was not a valid GPU-only comparison because EmbeddingGemma traversed an SSH tunnel and prefix proxy while production BGE-small was served locally. Corrected path decomposition measured `83.1 ms` raw GPU tunnel embedding and `114.6 ms` through the prefix proxy; further optimization or colocation is required for interactive query parity.

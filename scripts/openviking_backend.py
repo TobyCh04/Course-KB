@@ -217,6 +217,35 @@ class CornellOpenVikingBackend:
         _check_namespace(uri)
         return self.client.read(uri, offset=0, limit=max(1, min(int(limit), 50000)))
 
+    def hybrid_search(
+        self,
+        query: str,
+        *,
+        index_path: str | Path = "data/lexical_index.json",
+        search_limit: int = 20,
+        lexical_limit: int = 20,
+        top_k: int = 10,
+        **kwargs: Any,
+    ) -> Any:
+        """Dense + BM25 lexical hybrid search with optional reranking.
+
+        This is a thin wrapper that delegates to hybrid_retrieval to avoid a
+        circular module dependency at import time.
+        """
+        try:
+            from . import hybrid_retrieval
+        except ImportError:  # pragma: no cover - direct CLI use
+            import hybrid_retrieval
+        return hybrid_retrieval.hybrid_search(
+            self,
+            query,
+            index_path=Path(index_path),
+            search_limit=search_limit,
+            lexical_limit=lexical_limit,
+            top_k=top_k,
+            **kwargs,
+        )
+
 
 def _safe_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
     if not metadata:
