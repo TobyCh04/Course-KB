@@ -22,7 +22,10 @@ def _response(**overrides):
     payload = {
         "intent": "document_lookup",
         "backends": ["openviking"],
-        "queries": [{"text": "closed loop stability", "role": "retrieval"}],
+        "queries": [
+            {"text": "closed loop stability keywords", "role": "lexical"},
+            {"text": "explain closed loop stability", "role": "semantic"},
+        ],
         "filters": {},
         "retrieval_mode": "hybrid_rerank",
         "limit": 5,
@@ -83,7 +86,10 @@ def test_planner_accepts_fenced_json_and_explicit_filters():
     import json
 
     response = _response(
-        queries=[{"text": "SYSEN 6800 kanban", "role": "course lookup"}],
+        queries=[
+            {"text": "SYSEN 6800 kanban keywords", "role": "lexical"},
+            {"text": "kanban pull system in SYSEN 6800", "role": "semantic"},
+        ],
         filters={"course": "SYSEN 6800", "lecture": 3},
     )
     result = QueryPlanner(lambda prompt: "```json\n" + json.dumps(response) + "\n```" ).plan(
@@ -115,20 +121,24 @@ def test_planner_deduplicates_rewritten_queries():
     import json
     response = _response(
         queries=[
-            {"text": "kanban pull system"},
-            {"text": "KANBAN PULL SYSTEM"},
-            {"text": "kanban formula"},
+            {"text": "kanban pull system", "role": "lexical"},
+            {"text": "KANBAN PULL SYSTEM", "role": "lexical"},
+            {"text": "explain kanban pull system", "role": "semantic"},
         ]
     )
     result = QueryPlanner(lambda prompt: json.dumps(response)).plan("Explain kanban")
-    assert [query.text for query in result.plan.queries] == ["kanban pull system", "kanban formula"]
+    assert [query.text for query in result.plan.queries] == [
+        "kanban pull system",
+        "explain kanban pull system",
+    ]
+    assert {query.role for query in result.plan.queries} == {"lexical", "semantic"}
 
 
 def test_validate_model_response_does_not_call_llm():
     planner = QueryPlanner(llm=lambda _prompt: (_ for _ in ()).throw(AssertionError("must not call")))
     result = planner.validate_model_response(
         "What is a kanban pull system?",
-        '{"intent":"document_lookup","backends":["openviking"],"queries":[{"text":"kanban pull system"}],"filters":{},"retrieval_mode":"hybrid_rerank","limit":5}',
+        '{"intent":"document_lookup","backends":["openviking"],"queries":[{"text":"kanban pull system","role":"lexical"},{"text":"what is a kanban pull system","role":"semantic"}],"filters":{},"retrieval_mode":"hybrid_rerank","limit":5}',
     )
     assert result.trace.status == "planned"
     assert result.plan.planner_model is None
@@ -159,6 +169,36 @@ def test_search_layer_uses_active_planner_and_returns_warning(tmp_path):
     assert "failed after 2 attempts" in result["trace"]["warning"]
     assert result["plan"]["planner_model"] == "current-main"
     assert result["results"][0]["uri"].startswith(CORNELL_NAMESPACE)
+
+
+def test_orchestrator_executes_lexical_and_semantic_queries(tmp_path):
+    backend = CornellOpenVikingBackend(FakeClient())
+    calls = []
+
+    def hybrid(query, **kwargs):
+        calls.append(query)
+        return {
+            "mode": "dense_lexical_reranker",
+            "results": [
+                {"uri": f"{CORNELL_NAMESPACE}/{len(calls)}", "rerank_score": 0.9},
+                {"uri": f"{CORNELL_NAMESPACE}/low-{len(calls)}", "rerank_score": 0.01},
+            ],
+        }
+
+    backend.hybrid_search = hybrid
+    import json
+    response = _response(
+        queries=[
+            {"text": "gain margin control systems", "role": "lexical"},
+            {"text": "how to calculate gain margin", "role": "semantic"},
+        ]
+    )
+    planning = QueryPlanner(lambda prompt: json.dumps(response)).plan("whats gain margin")
+    result = execute_planned_query(planning, backend, index_path=tmp_path / "index.json")
+
+    assert calls == ["gain margin control systems", "how to calculate gain margin"]
+    assert [item["query_role"] for item in result["trace"]["execution"]] == ["lexical", "semantic"]
+    assert len(result["results"]) == 2
 
 
 class FakeClient:

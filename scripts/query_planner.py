@@ -29,6 +29,7 @@ PlannerLLM = Callable[[str], str]
 _MAX_PROMPT_QUERY = 4000
 _MAX_REWRITTEN_QUERY = 1000
 _ALLOWED_RESPONSE_KEYS = frozenset({"intent", "backends", "queries", "filters", "retrieval_mode", "limit"})
+_QUERY_ROLES = frozenset({"lexical", "semantic"})
 _COURSE_RE = re.compile(r"\b[A-Z]{2,8}\s*\d{4}\b")
 _LECTURE_RE = re.compile(r"\blecture\s*(?:number\s*)?(\d{1,4})\b", re.IGNORECASE)
 
@@ -137,14 +138,25 @@ JSON shape:
 {{
   "intent": "document_lookup",
   "backends": ["openviking"],
-  "queries": [{{"text": "...", "role": "retrieval"}}],
+  "queries": [
+    {{"text": "compact technical keywords and exact terms", "role": "lexical"}},
+    {{"text": "natural-language semantic retrieval query", "role": "semantic"}}
+  ],
   "filters": {{}},
   "retrieval_mode": "hybrid_rerank",
   "limit": 5
 }}
 
 Original user query:
-{query[:_MAX_PROMPT_QUERY]}"""
+{query[:_MAX_PROMPT_QUERY]}
+
+Generate exactly two enhanced versions of the query:
+1. lexical: compact technical keywords, formulas, acronyms, and named entities;
+   remove conversational filler such as "what is", "and", and "in" when safe.
+2. semantic: a natural-language phrase preserving the concept and relationships
+   that dense embeddings need.
+Both versions must describe the same user intent. Do not add facts or filters
+not supported by the original query."""
 
     def _parse_and_validate(self, raw: str, original_query: str, trace_id: str) -> QueryPlan:
         if not isinstance(raw, str) or not raw.strip():
@@ -223,18 +235,28 @@ Original user query:
                 continue
             if "viking://" in normalized and not normalized.startswith(CORNELL_NAMESPACE):
                 raise PlannerValidationError("planner produced a foreign namespace URI")
+            role = item.get("role")
+            if role not in _QUERY_ROLES:
+                raise PlannerValidationError(
+                    "each planned query must have role 'lexical' or 'semantic'"
+                )
             seen.add(normalized.casefold())
             result.append(
                 PlannedQuery(
                     text=normalized,
                     original_query=original_query,
                     trace_id=trace_id,
-                    role=str(item.get("role", "retrieval")),
+                    role=role,
                     backend=item.get("backend"),
                 )
             )
         if not result:
             raise PlannerValidationError("all planned queries were empty or duplicates")
+        roles = {query.role for query in result}
+        if len(result) != 2 or roles != _QUERY_ROLES:
+            raise PlannerValidationError(
+                "planner must return exactly one lexical and one semantic query"
+            )
         return tuple(result)
 
     @staticmethod

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .openviking_backend import CORNELL_NAMESPACE, CornellOpenVikingBackend
+from .hybrid_retrieval import select_final_sources
 from .query_models import PlanningResult, QueryPlan, QueryTrace
 
 HindsightRecall = Callable[[str, int], Any]
@@ -37,6 +38,7 @@ def execute_planned_query(
             started = time.monotonic()
             record: dict[str, Any] = {
                 "query": planned_query.text,
+                "query_role": planned_query.role,
                 "original_query": plan.original_query,
                 "trace_id": plan.trace_id,
                 "backend": backend_name,
@@ -77,7 +79,16 @@ def execute_planned_query(
             record["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
             trace.execution.append(record)
 
-    final_sources = list(merged.values())[:max_sources]
+    candidates = sorted(merged.values(), key=_candidate_score, reverse=True)
+    if candidates:
+        final_sources, source_cutoff = select_final_sources(
+            candidates,
+            default_limit=plan.limit,
+            max_sources=max_sources,
+            reranked=any("rerank_score" in item for item in candidates),
+        )
+    else:
+        final_sources, source_cutoff = [], {}
     trace.source_uris = [item.get("uri", "") for item in final_sources if item.get("uri")]
     if trace.status == "planned" and any(item.get("status") == "failed" for item in trace.execution):
         trace.status = "partial_failure"
@@ -86,6 +97,7 @@ def execute_planned_query(
         "namespace": CORNELL_NAMESPACE,
         "plan": plan.to_dict(),
         "trace": trace.to_dict(),
+        "source_cutoff": source_cutoff,
         "results": final_sources,
     }
 
