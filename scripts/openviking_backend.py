@@ -310,7 +310,7 @@ def is_approved_cornell_path(path: str | Path, root: str | Path) -> bool:
 
 
 def _check_namespace(uri: str) -> None:
-    if not uri.startswith(CORNELL_NAMESPACE):
+    if uri != CORNELL_NAMESPACE and not uri.startswith(CORNELL_NAMESPACE + "/"):
         raise ValueError("OpenViking URI is outside the Cornell KB namespace")
 
 

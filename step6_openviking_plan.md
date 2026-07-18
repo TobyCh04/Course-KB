@@ -1,8 +1,8 @@
 # Step 6: OpenViking Retrieval Backend — Detailed Plan
 
-**Status:** EXPERIMENT COMPLETE — EmbeddingGemma A/B tested and not promoted; BGE-small remains the production embedding index; DeepSeek V4 Flash is the active production VLM after a clean gpt5.4mini comparison.
+**Status:** Step 6.4 and Step 6.5 complete. **Current:** Step 6.6 LLM-enhanced query planning and backend routing — implementation plan saved; pre-implementation hardening and tests in progress. EmbeddingGemma A/B was completed and not promoted; BGE-small remains the production embedding index; DeepSeek V4 Flash remains the active production VLM.
 **Created:** 2026-07-16
-**Last checkpoint:** 2026-07-17 10:56:54 -0500 — see `openviking/STATUS.md` and `openviking/test_runs/production_vlm_ab_report.md` for verified experiment results and runtime state.
+**Last checkpoint:** 2026-07-18 05:34:33 -0500 — detailed Step 6.6 plan: `.hermes/plans/2026-07-18_053433-step-6-6-llm-enhanced-query.md`. Operational experiment evidence remains in `openviking/STATUS.md` and `openviking/test_runs/production_vlm_ab_report.md`.
 **Depends on:** Step 1 (Whisper/MOSS), Step 2 (pymupdf/GLM-OCR/Qwen3-VL), Step 3 (Hindsight metadata and ingestion), Step 4 (lecture note generation)
 
 ---
@@ -11,21 +11,22 @@
 
 Make OpenViking the source-grounded retrieval backend for `cornell-kb`, while retaining Hindsight for personal, temporal, entity, graph, and learning-history memory. Run the media-to-retrieval pipeline on the RTX 4080 laptop, where Whisper and OCR already run, and promote a stronger English embedding/retrieval stack only after a grounded A/B evaluation.
 
-## Current Status — 2026-07-17
+## Current Status — 2026-07-18
 
 - Cornell-safe OpenViking adapter implemented with namespace checks, provenance metadata, dry-run support, injectable clients, and offline tests.
 - Audio and raw book binaries are excluded from future ingestion. Previously indexed `Test.m4a` and `books/lean-implementation/full_text.txt` were removed.
-- Production OpenViking remains the small-model embedding index on mini-PC port `1934`; health verified. Its active VLM is now `deepseek-v4-flash` through `https://api.deepseek.com/v1`; the previous gpt5.4mini configuration is preserved in `openviking/config/ov_bge_en.conf.gpt54mini.bak`.
+- Production OpenViking remains the small-model embedding index on mini-PC port `1934`; its active VLM is `deepseek-v4-flash` through `https://api.deepseek.com/v1`.
 - BGE-large A/B remains paused because the CUDA Python runtime failed Windows DLL/mount loading and the CPU fallback was too slow.
-- EmbeddingGemma A/B setup is now complete: 768-dimensional GGUF on the RTX 4080 laptop, native CUDA launcher, query/document prefix proxies, 1800-token hard cap, 1600-token parser cap, and isolated OpenViking configs on ports `1936`/`1937`.
-- DeepSeek V4 Flash was tested on the same clean 31-resource manifest as a fresh gpt5.4mini control. DeepSeek had a modest retrieval edge but materially higher VLM token generation; see the A/B report for exact metrics.
-- Staged EmbeddingGemma testing completed: native 768-dimensional embeddings, query/document prefixes, token truncation, isolated startup, DeepSeek summaries, smoke ingestion, full cleaned-corpus ingestion, and an 8-query comparison against production BGE-small.
-- Curated ingestion policy v1 is now enforced for the production Cornell namespace through an explicit allowlist. The approved manifest contains 17 resources: 3 canonical source artifacts and 14 final source-derived Lean notes/skills; raw/project/test/generated material is excluded. Production was checkpointed, rebuilt, and verified with zero queue errors/requeues and zero missing vectors. See `openviking/test_runs/production_curated_policy_ingest_summary.json`. Step 6 is paused pending the remote tunnel/proxy latency gate and held-out benchmark.
-- Root-cause correction verified: the original EmbeddingGemma process did run on CUDA (`25/25` layers offloaded), but `--parallel 1` underused the GPU. The corrected launcher uses `--device CUDA0`, `--parallel 8`, `-c 16384`, `-b 2048`, `-ub 2048`, Flash Attention, and continuous batching.
-- Corrected direct throughput: GPU batch-8 `154.4 vectors/s` versus identical CPU-only `93.9 vectors/s`; GPU batch-32 `155.7 vectors/s` versus CPU `108.0 vectors/s`.
-- The old end-to-end latency comparison was not a valid GPU-only comparison because EmbeddingGemma traversed an SSH tunnel and prefix proxy while production BGE-small was served locally. Corrected path decomposition measured `83.1 ms` raw GPU tunnel embedding and `114.6 ms` through the prefix proxy; further optimization or colocation is required for interactive query parity.
-- OpenViking cannot keep ingest and query processes alive concurrently against the same workspace. Use `1936` for ingest, stop it, then use `1937` for query; both remain isolated from production `1934`.
-- Direct Tailscale TCP to the laptop embedding port was blocked on this host, so the tested path uses an SSH local tunnel `127.0.0.1:18001 -> 100.104.205.105:8001`.
+- EmbeddingGemma A/B setup and full isolated evaluation are complete but it was not promoted because the remote tunnel/prefix-proxy path still needs interactive-latency optimization and a held-out benchmark.
+- Curated ingestion policy v1 is enforced for the production Cornell namespace through an explicit allowlist of 17 resources; production was rebuilt and verified with zero queue errors/requeues and zero missing vectors.
+- Step 6.4 reranking and Step 6.5 BM25 + dense RRF hybrid retrieval are complete. The lexical index has been rebuilt with JSON-derived course/lecture/source metadata while preserving OpenViking URI alignment.
+- **Step 6.6 is now the active implementation step.** The detailed plan is `.hermes/plans/2026-07-18_053433-step-6-6-llm-enhanced-query.md`; the query planner itself has not been implemented.
+- Current preflight work: strict namespace regression coverage, lexical metadata/filter coverage, response-shape validation, multi-query provenance, deterministic fallback, and traceability tests.
+
+### Step 6.6 terminology
+
+- **Query plan:** the validated intended strategy: intent, backend(s), rewritten queries, explicit filters, retrieval mode, limits, and trace ID.
+- **Query trace:** the execution record: actual backends, query statuses, timings, result counts, source URIs, fallback reasons, and sanitized errors. It must never contain secrets.
 
 ## Corpus import policy and pre-ingestion cleanup gate
 
@@ -191,7 +192,7 @@ The promoted model must improve the expanded difficult-query benchmark, not mere
 
 ---
 
-## 6.4 Add a reranking layer
+## 6.4 Add a reranking layer — COMPLETE (2026-07-17)
 
 **Objective:** Retrieve a broad candidate set cheaply, then apply a stronger cross-encoder to improve ordering.
 
@@ -231,7 +232,7 @@ OpenViking read()
 
 ---
 
-## 6.5 Add lexical/hybrid retrieval
+## 6.5 Add lexical/hybrid retrieval — COMPLETE (2026-07-17)
 
 **Objective:** Recover exact terms that dense embeddings may underweight, including equations, symbols, acronyms, and identifiers.
 

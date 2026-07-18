@@ -17,10 +17,11 @@ from scripts.openviking_backend import (  # noqa: E402
 
 
 class FakeOpenVikingClient:
-    def __init__(self):
+    def __init__(self, search_response=None):
         self.add_calls = []
         self.search_calls = []
         self.read_calls = []
+        self.search_response = search_response or {"resources": []}
 
     def add_resource(self, **kwargs):
         self.add_calls.append(kwargs)
@@ -28,7 +29,7 @@ class FakeOpenVikingClient:
 
     def search(self, **kwargs):
         self.search_calls.append(kwargs)
-        return {"results": []}
+        return self.search_response
 
     def read(self, uri, **kwargs):
         self.read_calls.append((uri, kwargs))
@@ -133,3 +134,11 @@ def test_search_and_read_are_limited_to_cornell_namespace():
 
     with pytest.raises(ValueError, match="outside the Cornell KB namespace"):
         backend.read("viking://resources/other")
+
+
+def test_namespace_prefix_collision_is_rejected():
+    client = FakeOpenVikingClient()
+    backend = CornellOpenVikingBackend(client)
+
+    with pytest.raises(ValueError, match="outside the Cornell KB namespace"):
+        backend.read(CORNELL_NAMESPACE + "-unauthorized/resource")

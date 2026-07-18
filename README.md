@@ -4,12 +4,13 @@
 **Created:** 2026-07-09
 **Location:** `~/hermes_related/Cornell_KB/`
 
-## Current Status — 2026-07-16
+## Current Status — 2026-07-18
 
-- **Production OpenViking:** healthy on mini-PC port `1934`, using `bge-small-en-v1.5-f16`.
-- **Cornell ingestion safety:** implemented and tested. Audio and raw book binaries are rejected/excluded; previously indexed audio and `full_text.txt` were removed from OpenViking.
-- **BGE-large A/B test:** paused before full-corpus ingestion. The `bge-large-en-v1.5` model and laptop embedding API are prepared, but the CUDA runtime launch failed and the CPU fallback was too slow. Temporary A/B services and partial workspace were stopped/removed.
-- **Next resume point:** fix native CUDA launch on the RTX 4080 laptop, start the laptop embedding API, create a fresh isolated vector workspace, ingest the cleaned corpus, and run the retrieval benchmark. Do not modify production port `1934`.
+- **Production OpenViking:** last verified healthy on mini-PC port `1934`, using the production `bge-small-en-v1.5-f16` embedding index and DeepSeek V4 Flash VLM. Production configuration and workspace remain unchanged.
+- **Cornell ingestion safety:** implemented and tested. Audio and raw book binaries are rejected/excluded; the production namespace uses a verified curated allowlist of 17 resources.
+- **Retrieval foundation:** reranking (Step 6.4) and BM25 + dense RRF hybrid retrieval (Step 6.5) are complete. The lexical index has been rebuilt with derived course/lecture/source metadata while preserving OpenViking URI alignment.
+- **Embedding experiments:** EmbeddingGemma A/B completed but was not promoted because the remote tunnel/prefix-proxy path still needs interactive-latency optimization and a held-out benchmark. BGE-large remains paused; BGE-small remains production.
+- **Current step:** Step 6.6 — LLM-enhanced query planning and backend routing. The implementation plan is saved at `.hermes/plans/2026-07-18_053433-step-6-6-llm-enhanced-query.md`. Pre-implementation hardening and tests are in progress; the query planner itself has not been implemented.
 
 ## Overview
 
@@ -62,11 +63,11 @@ cleaned-up temporary-directory behavior, so concurrent/repeated runs do not shar
 
 ### Phase 2: Knowledge Processing and Retrieval Backend
 4. **Lecture Note Generator** — Takes transcript + slide PDF → generates structured lecture notes (key concepts, formulas, examples, action items)
-5. **OpenViking Cornell Backend** — Safe Cornell adapter implemented; cleanup and offline tests complete. Production integration and automatic Hermes routing remain in progress.
-6. **Primary English Embedding Upgrade** — BGE-large A/B preparation complete; full indexing and benchmark paused pending CUDA runtime fix on the laptop.
-7. **Reranking Layer** — Retrieve a wider candidate set with the dense embedder, then rerank the top candidates with `bge-reranker-base`, `bge-reranker-large`, or the best supported local alternative
-8. **Lexical/Hybrid Retrieval** — Add BM25 or sparse retrieval for exact formulas, symbols, identifiers, acronyms, and rare technical terms; merge dense and lexical candidates before reranking
-9. **LLM Query Layer** — Add LLM-assisted query rewriting, intent classification, multi-query decomposition, course/source filtering, and query expansion for ambiguous student questions
+5. **OpenViking Cornell Backend** — Safe curated adapter, source search/read/trace CLI, and ingestion safety complete; laptop orchestration remains separately deferred.
+6. **Primary English Embedding Upgrade** — EmbeddingGemma A/B experiment complete but not promoted; BGE-small remains the production baseline while remote latency and held-out evaluation remain open.
+7. **Reranking Layer** — ✅ Complete: cross-encoder reranking with persistent `bge-reranker-base` server and dense fallback.
+8. **Lexical/Hybrid Retrieval** — ✅ Complete: BM25 lexical retrieval plus dense RRF fusion, canonical URI deduplication, and rebuilt metadata-aware lexical index.
+9. **LLM Query Layer** — **Current step:** implement validated LLM query planning, intent routing, multi-query decomposition, explicit filter propagation, deterministic fallback, and query tracing. Detailed plan: `.hermes/plans/2026-07-18_053433-step-6-6-llm-enhanced-query.md`.
 10. **Textbook Processor** — Extracts key concepts, definitions, theorems from textbook chapters → indexes source content in OpenViking and retains relevant learning memories in Hindsight
 11. **Homework/Exam Processor** — Extracts problem statements, solution patterns, common mistakes → indexes source content in OpenViking and retains review memories in Hindsight
 

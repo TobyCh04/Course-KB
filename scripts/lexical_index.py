@@ -79,6 +79,35 @@ def _read_document_text(path: Path) -> str:
     return ""
 
 
+def _derive_json_metadata(path: Path) -> dict[str, Any]:
+    """Extract uniform filter metadata from JSON fact/diagram records."""
+    if path.suffix.lower() != ".json":
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+    records = data if isinstance(data, list) else [data]
+    records = [record for record in records if isinstance(record, dict)]
+    if not records:
+        return {}
+
+    metadata: dict[str, Any] = {}
+    for key in ("course", "course_name", "lecture", "source_type", "semester", "date"):
+        values: list[Any] = []
+        for record in records:
+            value = record.get(key)
+            if value is None or value in values:
+                continue
+            if isinstance(value, (str, int, float, bool)):
+                values.append(value)
+        # A file-level filter is safe only when every populated record agrees.
+        if len(values) == 1 and all(record.get(key) == values[0] for record in records):
+            metadata[key] = values[0]
+    return metadata
+
+
 def _build_field_text(
     path: Path,
     root: Path,
@@ -229,7 +258,12 @@ def build_lexical_index(
             relative = path.relative_to(root).as_posix()
         except ValueError:
             relative = path.name
-        extra_fields = (extra_metadata or {}).get(str(path), {})
+        provided_fields = (extra_metadata or {}).get(str(path), {})
+        extra_fields = {
+            **_derive_json_metadata(path),
+            **provided_fields,
+        }
+        extra_fields.setdefault("source_type", "cornell-source")
         field_text = _build_field_text(path, root, text, extra_fields)
         tokens = _tokenize(field_text)
         if not tokens:
@@ -237,9 +271,11 @@ def build_lexical_index(
         # Use the same deterministic URI OpenViking uses for this source.
         # The ingest script uses source_type="cornell-source", and OpenViking
         # appends the filename to the directory URI returned by resource_uri().
-        source_type = extra_fields.get("source_type", "cornell-source")
-        course = extra_fields.get("course")
-        uri = resource_uri(path, course=course, source_type=source_type, root=root)
+        # URI identity must match the ingestion metadata supplied by the caller.
+        # Inferred JSON metadata is semantic filter data, not a new OpenViking URI.
+        uri_source_type = provided_fields.get("source_type", "cornell-source")
+        uri_course = provided_fields.get("course")
+        uri = resource_uri(path, course=uri_course, source_type=uri_source_type, root=root)
         uri = f"{uri}/{path.name}"
         corpus_tokens.append(tokens)
         uris.append(uri)

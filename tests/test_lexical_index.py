@@ -64,6 +64,22 @@ def test_build_lexical_index_uses_openviking_uris(tmp_path):
     assert index.uris[0].startswith("viking://resources/cornell-kb/")
 
 
+def test_build_lexical_index_derives_filter_metadata_from_json(tmp_path):
+    doc = tmp_path / "lecture_facts.json"
+    doc.write_text(
+        '[{"content": "Kanban pull system", "course": "TEST", '
+        '"lecture": 2, "source_type": "diagram"}]',
+        encoding="utf-8",
+    )
+
+    index = build_lexical_index(tmp_path, extra_files=[doc])
+
+    assert index.metadata[0]["course"] == "TEST"
+    assert index.metadata[0]["lecture"] == 2
+    assert index.metadata[0]["source_type"] == "diagram"
+    assert "/uncategorized/cornell-source/" in index.uris[0]
+
+
 def test_lexical_index_serialisation_roundtrip(tmp_path):
     doc = tmp_path / "test.md"
     doc.write_text("# Test\nThis is a test document for BM25.", encoding="utf-8")

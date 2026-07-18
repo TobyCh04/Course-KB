@@ -10567,7 +10567,14 @@
       "test",
       "course",
       "pre",
-      "semester"
+      "semester",
+      "test",
+      "test",
+      "course",
+      "pre",
+      "semester",
+      "2",
+      "diagram"
     ],
     [
       "data",
@@ -20335,7 +20342,14 @@
       "test",
       "course",
       "pre",
-      "semester"
+      "semester",
+      "test",
+      "test",
+      "course",
+      "pre",
+      "semester",
+      "1",
+      "diagram"
     ],
     [
       "config",
@@ -20575,7 +20589,9 @@
       "industrial",
       "applications",
       "data",
-      "pipelines"
+      "pipelines",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -22144,7 +22160,9 @@
       "industries",
       "without",
       "significant",
-      "modification"
+      "modification",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -22592,7 +22610,9 @@
       "do",
       "the",
       "calculations",
-      "first"
+      "first",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -23059,7 +23079,9 @@
       "replace",
       "the",
       "full",
-      "system"
+      "system",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -23571,7 +23593,9 @@
       "starting",
       "point",
       "not",
-      "comprehensive"
+      "comprehensive",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -24061,7 +24085,9 @@
       "industries",
       "need",
       "different",
-      "approaches"
+      "approaches",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -24496,7 +24522,9 @@
       "based",
       "on",
       "specific",
-      "needs"
+      "needs",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -25052,7 +25080,9 @@
       "lean",
       "house",
       "of",
-      "lean"
+      "lean",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -25501,7 +25531,9 @@
       "need",
       "more",
       "sophisticated",
-      "calculations"
+      "calculations",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -25953,7 +25985,9 @@
       "problems",
       "will",
       "cause",
-      "stockouts"
+      "stockouts",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -26462,7 +26496,9 @@
       "fail",
       "see",
       "counter",
-      "examples"
+      "examples",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -26674,7 +26710,9 @@
       "toc",
       "2010",
       "4",
-      "0"
+      "0",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -27127,7 +27165,9 @@
       "improving",
       "requires",
       "ongoing",
-      "effort"
+      "effort",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -27188,7 +27228,9 @@
       "7",
       "8",
       "9",
-      "11"
+      "11",
+      "cornell",
+      "source"
     ],
     [
       "books",
@@ -28184,7 +28226,9 @@
       "items",
       "moved",
       "to",
-      "rejected"
+      "rejected",
+      "cornell",
+      "source"
     ]
   ],
   "abstracts": [
@@ -28210,87 +28254,110 @@
     {
       "source_path": "data/freq_response_part2.json",
       "file_name": "freq_response_part2.json",
-      "extension": ".json"
+      "extension": ".json",
+      "course": "TEST",
+      "course_name": "Test Course (Pre-Semester)",
+      "lecture": 2,
+      "source_type": "diagram"
     },
     {
       "source_path": "data/freq_response_diagrams.json",
       "file_name": "freq_response_diagrams.json",
-      "extension": ".json"
+      "extension": ".json",
+      "course": "TEST",
+      "course_name": "Test Course (Pre-Semester)",
+      "lecture": 1,
+      "source_type": "diagram"
     },
     {
       "source_path": "config/course_catalog.yaml",
       "file_name": "course_catalog.yaml",
-      "extension": ".yaml"
+      "extension": ".yaml",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/BOOK_OVERVIEW.md",
       "file_name": "BOOK_OVERVIEW.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/cellular-manufacturing/SKILL.md",
       "file_name": "SKILL.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/constraint-management/SKILL.md",
       "file_name": "SKILL.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/cultural-change/SKILL.md",
       "file_name": "SKILL.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/four-strategies/SKILL.md",
       "file_name": "SKILL.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/house-of-lean/SKILL.md",
       "file_name": "SKILL.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/INDEX.md",
       "file_name": "INDEX.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/kanban-calculation/SKILL.md",
       "file_name": "SKILL.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/lead-time-analysis/SKILL.md",
       "file_name": "SKILL.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/lean-project-prescription/SKILL.md",
       "file_name": "SKILL.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/LEARNING_NOTE.md",
       "file_name": "LEARNING_NOTE.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/sustaining-gains/SKILL.md",
       "file_name": "SKILL.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/TALKING_POINTS.md",
       "file_name": "TALKING_POINTS.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     },
     {
       "source_path": "books/lean-implementation/triple-verification.md",
       "file_name": "triple-verification.md",
-      "extension": ".md"
+      "extension": ".md",
+      "source_type": "cornell-source"
     }
   ]
 }
