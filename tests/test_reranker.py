@@ -91,15 +91,15 @@ def test_rerank_candidates_reorders_by_cross_encoder_score():
     assert result[1]["uri"].endswith("/doc/c")
 
 
-def test_rerank_candidates_returns_all_when_fewer_than_top_k():
+def test_rerank_candidates_reranks_short_candidate_lists():
     candidates = [
         {"uri": f"{CORNELL_NAMESPACE}/doc/a", "score": 0.9, "abstract": "alpha"},
         {"uri": f"{CORNELL_NAMESPACE}/doc/b", "score": 0.7, "abstract": "beta"},
     ]
     result = reranker_mod.rerank_candidates("query", candidates, top_k=5)
-    # Should return both without calling the cross-encoder.
+    # Quality-first policy: reranking still runs when fewer than top_k exist.
     assert len(result) == 2
-    assert "rerank_score" not in result[0]  # no reranking happened
+    assert "rerank_score" in result[0]
 
 
 def test_rerank_candidates_falls_back_on_exception(monkeypatch):

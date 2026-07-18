@@ -32,8 +32,11 @@ DEFAULT_DENSE_WEIGHT = 1.0
 DEFAULT_LEXICAL_WEIGHT = 1.0
 DEFAULT_SEARCH_LIMIT = 20
 DEFAULT_LEXICAL_LIMIT = 20
-DEFAULT_TOP_K = 10
-DEFAULT_RERANK_TOP = 0
+DEFAULT_TOP_K = 5
+DEFAULT_MAX_SOURCES = 8
+DEFAULT_RERANK_TOP = 20
+DEFAULT_RERANK_SCORE_DROP = 0.15
+DEFAULT_FUSED_SCORE_DROP = 0.005
 
 
 def _canonical_uri(uri: str) -> str:
@@ -189,6 +192,58 @@ def _dedupe_by_canonical_uri(results: list[dict[str, Any]]) -> list[dict[str, An
     return deduped
 
 
+def select_final_sources(
+    candidates: list[dict[str, Any]],
+    *,
+    default_limit: int = DEFAULT_TOP_K,
+    max_sources: int = DEFAULT_MAX_SOURCES,
+    reranked: bool = True,
+    score_drop: float | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Select a bounded source set using a score-drop cutoff.
+
+    Cross-encoder and RRF scores are on different scales, so the default
+    drop is intentionally separate for each. These provisional thresholds are
+    returned in the cutoff metadata for later benchmark calibration.
+    """
+    if default_limit < 1 or max_sources < default_limit:
+        raise ValueError("source limits must satisfy 1 <= default_limit <= max_sources")
+    if not candidates:
+        return [], {"selected_count": 0, "cutoff_reason": "no_candidates"}
+    score_key = "rerank_score" if reranked and "rerank_score" in candidates[0] else (
+        "fused_score" if "fused_score" in candidates[0] else "score"
+    )
+    if score_drop is None:
+        score_drop = DEFAULT_RERANK_SCORE_DROP if score_key == "rerank_score" else DEFAULT_FUSED_SCORE_DROP
+    if score_drop < 0:
+        raise ValueError("score_drop must be non-negative")
+
+    best_score = float(candidates[0].get(score_key, 0.0))
+    threshold = best_score - score_drop
+    selected: list[dict[str, Any]] = []
+    cutoff_reason = "candidate_limit"
+    for candidate in candidates:
+        if len(selected) >= max_sources:
+            cutoff_reason = "max_sources"
+            break
+        score = float(candidate.get(score_key, 0.0))
+        if len(selected) >= default_limit and score < threshold:
+            cutoff_reason = "score_drop"
+            break
+        selected.append(candidate)
+
+    return selected, {
+        "selected_count": len(selected),
+        "score_key": score_key,
+        "best_score": best_score,
+        "score_threshold": threshold,
+        "score_drop": score_drop,
+        "cutoff_reason": cutoff_reason,
+        "default_limit": default_limit,
+        "max_sources": max_sources,
+    }
+
+
 def hybrid_search(
     backend: CornellOpenVikingBackend,
     query: str,
@@ -200,10 +255,14 @@ def hybrid_search(
     k: int = DEFAULT_RRF_K,
     dense_weight: float = DEFAULT_DENSE_WEIGHT,
     lexical_weight: float = DEFAULT_LEXICAL_WEIGHT,
-    rerank_top: int = 0,
+    rerank_top: int = DEFAULT_RERANK_TOP,
     rerank_server_url: str = "",
+    max_sources: int = DEFAULT_MAX_SOURCES,
+    rerank_score_drop: float | None = None,
 ) -> dict[str, Any]:
-    """Search OpenViking + BM25, fuse with RRF, optionally rerank.
+    """Search OpenViking + BM25, fuse with RRF, then rerank by default.
+
+    Set ``rerank_top=0`` only for an explicit diagnostic bypass.
 
     Args:
         backend: OpenViking backend (dense retrieval).
@@ -211,12 +270,15 @@ def hybrid_search(
         index_path: Path to the BM25 lexical index JSON.
         search_limit: Number of dense candidates to retrieve (pre-dedup).
         lexical_limit: Number of lexical candidates to retrieve.
-        top_k: Number of results to return after fusion (and reranking).
+        top_k: Default number of final source documents; dynamic selection may
+            expand this up to ``max_sources``.
         k: RRF smoothing constant.
         dense_weight: Weight for dense ranks in RRF.
         lexical_weight: Weight for lexical ranks in RRF.
-        rerank_top: If > 0, rerank the top N fused results with the cross-encoder.
+        rerank_top: Number of fused candidates to rerank. The default reranks
+            the full candidate pool; set to 0 only for diagnostics.
         rerank_server_url: Optional persistent reranker server (host:port).
+        max_sources: Hard maximum for final source documents.
 
     Returns:
         Result dict with query, mode, candidate counts, and results.
@@ -253,19 +315,37 @@ def hybrid_search(
 
     if rerank_top > 0 and fused:
         rerank_start = time.monotonic()
+        rerank_candidates = fused[:min(rerank_top, len(fused))]
         reranked = reranker_mod.rerank_candidates(
             query,
-            fused[:rerank_top],
-            top_k=rerank_top,
+            rerank_candidates,
+            top_k=len(rerank_candidates),
             server_url=rerank_server_url,
         )
         rerank_ms = round((time.monotonic() - rerank_start) * 1000, 2)
         has_rerank_scores = any("rerank_score" in c for c in reranked)
         result["mode"] = "dense_lexical_reranker" if has_rerank_scores else "dense_lexical_fallback"
         result["rerank_latency_ms"] = rerank_ms if has_rerank_scores else None
-        result["results"] = reranked
+        result["rerank_candidates"] = len(reranked)
+        selected, cutoff = select_final_sources(
+            reranked,
+            default_limit=top_k,
+            max_sources=max_sources,
+            reranked=has_rerank_scores,
+            score_drop=rerank_score_drop,
+        )
+        result["results"] = selected
+        result["source_cutoff"] = cutoff
     else:
         result["mode"] = "dense_plus_lexical"
+        selected, cutoff = select_final_sources(
+            fused,
+            default_limit=top_k,
+            max_sources=max_sources,
+            reranked=False,
+        )
+        result["results"] = selected
+        result["source_cutoff"] = cutoff
 
     return result
 
@@ -330,7 +410,7 @@ def main() -> int:
     )
     search_parser.add_argument(
         "--top-k", type=int, default=DEFAULT_TOP_K,
-        help="Results to return after fusion",
+        help="Default final source count (default 5)",
     )
     search_parser.add_argument(
         "--rrf-k", type=int, default=DEFAULT_RRF_K,
@@ -345,12 +425,16 @@ def main() -> int:
         help="Weight for lexical ranks in RRF",
     )
     search_parser.add_argument(
-        "--rerank-top", type=int, default=0,
-        help="If > 0, rerank the top N fused results with the cross-encoder",
+        "--rerank-top", type=int, default=DEFAULT_RERANK_TOP,
+        help="Fused candidates to rerank; 0 explicitly disables reranking",
     )
     search_parser.add_argument(
         "--rerank-server", default="",
         help="Persistent reranker server host:port (e.g. localhost:1940)",
+    )
+    search_parser.add_argument(
+        "--max-sources", type=int, default=DEFAULT_MAX_SOURCES,
+        help="Hard maximum final source documents (default 8)",
     )
     search_parser.add_argument(
         "--build", action="store_true",
@@ -403,6 +487,7 @@ def main() -> int:
             lexical_weight=args.lexical_weight,
             rerank_top=args.rerank_top,
             rerank_server_url=args.rerank_server,
+            max_sources=args.max_sources,
         )
     elif args.command == "ab":
         result = hybrid_ab_comparison(

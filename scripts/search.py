@@ -25,8 +25,10 @@ from typing import Any
 
 try:
     from .openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
+    from .hybrid_retrieval import DEFAULT_MAX_SOURCES, DEFAULT_RERANK_TOP, DEFAULT_TOP_K
 except ImportError:  # pragma: no cover - exercised by direct CLI use
     from openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
+    from hybrid_retrieval import DEFAULT_MAX_SOURCES, DEFAULT_RERANK_TOP, DEFAULT_TOP_K
 
 DEFAULT_OPENVIKING_URL = "http://127.0.0.1:1934"
 DEFAULT_LIMIT = 8
@@ -90,8 +92,9 @@ def cmd_hybrid(
     k: int,
     dense_weight: float,
     lexical_weight: float,
-    rerank_top: int,
-    rerank_server: str,
+    rerank_top: int = DEFAULT_RERANK_TOP,
+    rerank_server: str = "",
+    max_sources: int = DEFAULT_MAX_SOURCES,
 ) -> dict[str, Any]:
     """Search with dense + BM25 lexical fusion."""
     return backend.hybrid_search(
@@ -105,6 +108,7 @@ def cmd_hybrid(
         lexical_weight=lexical_weight,
         rerank_top=rerank_top,
         rerank_server_url=rerank_server,
+        max_sources=max_sources,
     )
 
 
@@ -120,13 +124,16 @@ def cmd_hybrid_trace(
     dense_weight: float,
     lexical_weight: float,
     read_limit: int,
+    rerank_top: int = DEFAULT_RERANK_TOP,
+    rerank_server: str = "",
+    max_sources: int = DEFAULT_MAX_SOURCES,
 ) -> dict[str, Any]:
     """Hybrid search + read the top fused result's source."""
     result = cmd_hybrid(
         backend, query,
         index_path=index_path, limit=limit, lexical_limit=lexical_limit,
         top_k=top_k, k=k, dense_weight=dense_weight, lexical_weight=lexical_weight,
-        rerank_top=0, rerank_server="",
+        rerank_top=rerank_top, rerank_server=rerank_server, max_sources=max_sources,
     )
     if result["results"]:
         top_uri = result["results"][0]["uri"]
@@ -187,8 +194,8 @@ def main() -> int:
         help="Number of lexical candidates to retrieve (hybrid commands)",
     )
     parser.add_argument(
-        "--top-k", type=int, default=10,
-        help="Results to return after fusion (hybrid commands)",
+        "--top-k", type=int, default=DEFAULT_TOP_K,
+        help="Default final source count (default 5)",
     )
     parser.add_argument(
         "--rrf-k", type=int, default=60,
@@ -203,12 +210,16 @@ def main() -> int:
         help="Weight for lexical ranks in RRF (hybrid commands)",
     )
     parser.add_argument(
-        "--rerank-top", type=int, default=0,
-        help="If > 0, rerank the top N fused results (hybrid search only)",
+        "--rerank-top", type=int, default=DEFAULT_RERANK_TOP,
+        help="Fused candidates to rerank; 0 explicitly disables reranking",
     )
     parser.add_argument(
         "--rerank-server", default="",
-        help="Persistent reranker server host:port (hybrid search only)",
+        help="Persistent reranker server host:port",
+    )
+    parser.add_argument(
+        "--max-sources", type=int, default=DEFAULT_MAX_SOURCES,
+        help="Hard maximum final source documents (default 8)",
     )
     args = parser.parse_args()
 
@@ -237,6 +248,7 @@ def main() -> int:
             lexical_weight=args.lexical_weight,
             rerank_top=args.rerank_top,
             rerank_server=args.rerank_server,
+            max_sources=args.max_sources,
         )
     elif args.command == "hybrid-trace":
         result = cmd_hybrid_trace(
@@ -249,6 +261,9 @@ def main() -> int:
             dense_weight=args.dense_weight,
             lexical_weight=args.lexical_weight,
             read_limit=args.read_limit,
+            rerank_top=args.rerank_top,
+            rerank_server=args.rerank_server,
+            max_sources=args.max_sources,
         )
     else:
         parser.error(f"Unknown command: {args.command}")

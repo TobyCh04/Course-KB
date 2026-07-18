@@ -150,6 +150,7 @@ def test_hybrid_search_returns_fused_results(tmp_path, monkeypatch):
     result = hr.hybrid_search(
         backend, "kanban", index_path=index_path,
         search_limit=3, lexical_limit=3, top_k=3,
+        rerank_top=0,
     )
 
     assert result["query"] == "kanban"
@@ -187,6 +188,63 @@ def test_hybrid_search_reranker_flag(tmp_path, monkeypatch):
     assert rerank_called
 
 
+def test_hybrid_search_defaults_to_reranking_and_records_cutoff(tmp_path, monkeypatch):
+    backend = CornellOpenVikingBackend(FakeSearchClient())
+    index_path = _write_lexical_index(tmp_path, {"kanban": []})
+
+    def _fake_rerank(query, candidates, **kwargs):
+        for index, candidate in enumerate(candidates):
+            candidate["rerank_score"] = 1.0 - index * 0.02
+        return candidates
+
+    monkeypatch.setattr(hr.reranker_mod, "rerank_candidates", _fake_rerank)
+    result = hr.hybrid_search(
+        backend, "kanban", index_path=index_path,
+        search_limit=3, lexical_limit=3, top_k=2,
+    )
+
+    assert result["mode"] == "dense_lexical_reranker"
+    assert result["rerank_candidates"] == 3
+    assert len(result["results"]) == 3  # scores are close, so dynamic cutoff expands to 3
+    assert result["source_cutoff"]["score_key"] == "rerank_score"
+
+
+def test_select_final_sources_respects_score_drop_and_maximum():
+    candidates = [
+        {"uri": "a", "rerank_score": 1.0},
+        {"uri": "b", "rerank_score": 0.98},
+        {"uri": "c", "rerank_score": 0.97},
+        {"uri": "d", "rerank_score": 0.70},
+    ]
+    selected, cutoff = hr.select_final_sources(
+        candidates, default_limit=2, max_sources=4, score_drop=0.15,
+    )
+    assert [item["uri"] for item in selected] == ["a", "b", "c"]
+    assert cutoff["cutoff_reason"] == "score_drop"
+
+
+def test_select_final_sources_uses_stricter_default_fused_drop():
+    candidates = [
+        {"uri": "a", "fused_score": 0.0328},
+        {"uri": "b", "fused_score": 0.0300},
+        {"uri": "c", "fused_score": 0.0270},
+    ]
+    selected, cutoff = hr.select_final_sources(
+        candidates, default_limit=1, max_sources=3, reranked=False,
+    )
+    assert [item["uri"] for item in selected] == ["a", "b"]
+    assert cutoff["score_drop"] == 0.005
+
+
+def test_select_final_sources_never_exceeds_hard_maximum():
+    candidates = [{"uri": str(i), "rerank_score": 1.0 - i * 0.01} for i in range(10)]
+    selected, cutoff = hr.select_final_sources(
+        candidates, default_limit=2, max_sources=4, score_drop=1.0,
+    )
+    assert len(selected) == 4
+    assert cutoff["cutoff_reason"] == "max_sources"
+
+
 def test_cmd_hybrid_wires_backend_and_index(tmp_path):
     backend = CornellOpenVikingBackend(FakeSearchClient())
     lexical_results = {"kanban": []}
@@ -213,6 +271,7 @@ def test_cmd_hybrid_trace_reads_top_fused_result(tmp_path):
         limit=3, lexical_limit=3, top_k=3, k=60,
         dense_weight=1.0, lexical_weight=1.0,
         read_limit=1000,
+        rerank_top=0,
     )
     assert "top_source" in result
     assert result["top_source"]["uri"] == result["results"][0]["uri"]

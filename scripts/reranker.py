@@ -84,7 +84,11 @@ def _rerank_via_server(
         return results
     except Exception:
         # Fallback to dense ranking if server is unreachable.
-        return sorted(candidates, key=lambda c: c.get("score", 0.0), reverse=True)[:top_k]
+        return sorted(
+            candidates,
+            key=lambda c: c.get("fused_score", c.get("score", 0.0)),
+            reverse=True,
+        )[:top_k]
 
 
 def rerank_candidates(
@@ -113,9 +117,12 @@ def rerank_candidates(
     if not candidates:
         return []
 
-    if len(candidates) <= top_k:
-        # No point reranking if we already have fewer than top_k results.
-        return candidates
+    if top_k < 1:
+        raise ValueError("top_k must be positive")
+
+    # Rerank even when the candidate list is shorter than top_k. The caller
+    # may intentionally provide a small fused set, and quality—not avoiding a
+    # few milliseconds of work—is the default policy.
 
     # Server mode: delegate to the persistent reranker server.
     if server_url:
@@ -135,8 +142,13 @@ def rerank_candidates(
         return candidates[:top_k]
 
     except Exception:
-        # Fallback: return the top-k by original dense score.
-        return sorted(candidates, key=lambda c: c.get("score", 0.0), reverse=True)[:top_k]
+        # Fallback: return the top-k by fused score for hybrid candidates,
+        # otherwise the original dense score.
+        return sorted(
+            candidates,
+            key=lambda c: c.get("fused_score", c.get("score", 0.0)),
+            reverse=True,
+        )[:top_k]
 
 
 def search_with_rerank(
