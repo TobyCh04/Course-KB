@@ -167,6 +167,28 @@ def ensure_lexical_index(
     return index
 
 
+def _dedupe_by_canonical_uri(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep only the highest-scoring candidate per canonical URI.
+
+    OpenViking splits large source files into multiple chunk resources, each
+    with its own score and rank.  Without deduplication a document with 5
+    chunks would accumulate 5 RRF contributions and unfairly outrank a
+    single-chunk document at the same semantic relevance.
+
+    The input is assumed to be sorted by descending score (OpenViking returns
+    results pre-ranked).  We keep the first occurrence of each canonical URI.
+    """
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for item in results:
+        can = item.get("canonical_uri") or item.get("uri", "")
+        if not can or can in seen:
+            continue
+        seen.add(can)
+        deduped.append(item)
+    return deduped
+
+
 def hybrid_search(
     backend: CornellOpenVikingBackend,
     query: str,
@@ -186,8 +208,8 @@ def hybrid_search(
     Args:
         backend: OpenViking backend (dense retrieval).
         query: User query.
-        index_path: Path to the BM25 index JSON.
-        search_limit: Number of dense candidates to retrieve.
+        index_path: Path to the BM25 lexical index JSON.
+        search_limit: Number of dense candidates to retrieve (pre-dedup).
         lexical_limit: Number of lexical candidates to retrieve.
         top_k: Number of results to return after fusion (and reranking).
         k: RRF smoothing constant.
@@ -201,7 +223,10 @@ def hybrid_search(
     """
     # Dense retrieval
     dense_raw = backend.search(query, limit=search_limit)
-    dense_results = [_normalize_dense_result(h) for h in dense_raw.get("resources", [])]
+    _dense_all = [_normalize_dense_result(h) for h in dense_raw.get("resources", [])]
+    # Deduplicate: keep only the best-scoring chunk per source document so
+    # that multi-chunk documents don't inflate RRF scores.
+    dense_results = _dedupe_by_canonical_uri(_dense_all)
 
     # Lexical retrieval
     lexical_results = lexical_search(query, index_path, limit=lexical_limit)
@@ -259,7 +284,8 @@ def hybrid_ab_comparison(
 ) -> dict[str, Any]:
     """Compare dense-only, lexical-only, and fused retrieval on the same query."""
     dense_raw = backend.search(query, limit=search_limit)
-    dense_results = [_normalize_dense_result(h) for h in dense_raw.get("resources", [])]
+    _dense_all = [_normalize_dense_result(h) for h in dense_raw.get("resources", [])]
+    dense_results = _dedupe_by_canonical_uri(_dense_all)
     lexical_results = lexical_search(query, index_path, limit=lexical_limit)
     fused = reciprocal_rank_fusion(
         dense_results, lexical_results, k=k,

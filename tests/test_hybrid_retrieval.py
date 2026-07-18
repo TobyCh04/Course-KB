@@ -25,11 +25,11 @@ class FakeSearchClient:
 
     def __init__(self, candidates=None):
         self._candidates = candidates if candidates is not None else [
-            {"uri": f"{CORNELL_NAMESPACE}/doc/alpha", "score": 0.80, "level": 1,
+            {"uri": f"{CORNELL_NAMESPACE}/doc/alpha/alpha.md", "score": 0.80, "level": 1,
              "abstract": "Alpha: lean manufacturing overview."},
-            {"uri": f"{CORNELL_NAMESPACE}/doc/beta", "score": 0.85, "level": 1,
+            {"uri": f"{CORNELL_NAMESPACE}/doc/beta/beta.md", "score": 0.85, "level": 1,
              "abstract": "Beta: kanban calculation formula and examples."},
-            {"uri": f"{CORNELL_NAMESPACE}/doc/gamma", "score": 0.75, "level": 2,
+            {"uri": f"{CORNELL_NAMESPACE}/doc/gamma/gamma.md", "score": 0.75, "level": 2,
              "abstract": "Gamma: constraint management theory."},
         ]
 
@@ -114,6 +114,25 @@ def test_reciprocal_rank_fusion_merges_chunk_resources_by_canonical_uri():
     assert len(merged) == 1
     assert len(merged[0]["provenance"]) == 3  # 2 dense + 1 lexical
     assert merged[0]["canonical_uri"] == "viking://resources/cornell-kb/cornell-source/data-abc"
+
+
+def test_dedupe_by_canonical_uri_keeps_highest_scoring_chunk():
+    """Multiple chunks from the same source document should collapse to one."""
+    results = [
+        {"uri": "viking://resources/cornell-kb/doc/data-abc/chunk_1.md",
+         "canonical_uri": "viking://resources/cornell-kb/doc/data-abc",
+         "score": 0.9, "abstract": "chunk 1"},
+        {"uri": "viking://resources/cornell-kb/doc/data-abc/chunk_2.md",
+         "canonical_uri": "viking://resources/cornell-kb/doc/data-abc",
+         "score": 0.7, "abstract": "chunk 2"},
+        {"uri": "viking://resources/cornell-kb/doc/other-xyz/single.md",
+         "canonical_uri": "viking://resources/cornell-kb/doc/other-xyz",
+         "score": 0.8, "abstract": "other"},
+    ]
+    deduped = hr._dedupe_by_canonical_uri(results)
+    assert len(deduped) == 2
+    assert deduped[0]["uri"].endswith("chunk_1.md")  # highest score kept
+    assert deduped[1]["uri"].endswith("single.md")
 
 
 def test_hybrid_search_returns_fused_results(tmp_path, monkeypatch):
