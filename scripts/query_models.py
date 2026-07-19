@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .openviking_backend import CORNELL_NAMESPACE
+try:
+    from .openviking_backend import CORNELL_NAMESPACE
+except ImportError:  # pragma: no cover - exercised by direct CLI use
+    from openviking_backend import CORNELL_NAMESPACE
 
 SUPPORTED_INTENTS = frozenset(
     {

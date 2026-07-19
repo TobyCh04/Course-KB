@@ -6,7 +6,7 @@
 
 **Architecture:** The planner sits above the existing OpenViking dense search, BM25/RRF hybrid retrieval, reranker, and Hindsight clients. It converts one user query into a validated `QueryPlan`; the executor runs that plan; a `QueryTrace` records what was planned and what actually happened. The LLM may propose intent, rewrites, filters, and backend selection, but validation—not the LLM—controls namespaces, filters, limits, and fallback behavior.
 
-**Current state:** Step 6.4 reranking, Step 6.5 hybrid retrieval, and the Step 6.6 core implementation are complete and verified. Non-fallback plans now require exactly one compact `lexical` query and one natural-language `semantic` query; both execute through hybrid retrieval, merge with provenance, and receive one global calibrated cutoff. An initial source-read benchmark now evaluates a normalized 70/30 RRF-to-reranker blend; on 10 live read-only queries, RRF-only scored 70% hit@5 / 70% top-1 support / 0.700 MRR, while 70/30 scored 60% / 60% / 0.600. Production OpenViking remains unchanged on the existing BGE-small baseline.
+**Current state:** Step 6.4 reranking, Step 6.5 hybrid retrieval, and the Step 6.6 core implementation are complete and verified. Non-fallback plans now require exactly one compact `lexical` query and one natural-language `semantic` query; both execute through hybrid retrieval, merge with provenance, and receive one global calibrated cutoff. Hybrid BM25+dense RRF is now the default production path. The reranker and normalized 70/30 blend remain installed as explicit opt-in evaluation paths and are deferred until actual course material is available. Production OpenViking remains unchanged on the existing BGE-small baseline.
 
 ---
 

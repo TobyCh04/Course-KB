@@ -6,9 +6,17 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from .openviking_backend import CORNELL_NAMESPACE, CornellOpenVikingBackend
-from .hybrid_retrieval import select_final_sources
-from .query_models import PlanningResult, QueryPlan, QueryTrace
+try:
+    from .openviking_backend import CORNELL_NAMESPACE, CornellOpenVikingBackend
+    from .hybrid_retrieval import (
+        DEFAULT_EXPERIMENTAL_RERANK_TOP,
+        select_final_sources,
+    )
+    from .query_models import PlanningResult, QueryPlan, QueryTrace
+except ImportError:  # pragma: no cover - exercised by direct CLI use
+    from openviking_backend import CORNELL_NAMESPACE, CornellOpenVikingBackend
+    from hybrid_retrieval import DEFAULT_EXPERIMENTAL_RERANK_TOP, select_final_sources
+    from query_models import PlanningResult, QueryPlan, QueryTrace
 
 HindsightRecall = Callable[[str, int], Any]
 
@@ -22,6 +30,7 @@ def execute_planned_query(
     max_sources: int = 8,
     blend_rrf_weight: float | None = None,
     blend_reranker_weight: float = 0.30,
+    enable_reranker: bool = False,
 ) -> dict[str, Any]:
     """Execute validated plan with one role-aware hybrid call per OpenViking plan."""
     plan, trace = planning.plan, planning.trace
@@ -70,6 +79,7 @@ def execute_planned_query(
                 lexical_query=lexical.text if lexical else None,
                 blend_rrf_weight=blend_rrf_weight,
                 blend_reranker_weight=blend_reranker_weight,
+                enable_reranker=enable_reranker,
             )
             provenance = [query.text for query in openviking_queries]
             merge_result(result, provenance)
@@ -146,6 +156,7 @@ def _execute_openviking(
     lexical_query: str | None = None,
     blend_rrf_weight: float | None = None,
     blend_reranker_weight: float = 0.30,
+    enable_reranker: bool = False,
 ) -> dict[str, Any]:
     if plan.retrieval_mode == "dense":
         raw = backend.search(dense_query or query, limit=plan.limit)
@@ -159,7 +170,9 @@ def _execute_openviking(
         lexical_query=lexical_query,
         blend_rrf_weight=blend_rrf_weight,
         blend_reranker_weight=blend_reranker_weight,
-        rerank_top=0 if plan.retrieval_mode == "hybrid" else 20,
+        rerank_top=DEFAULT_EXPERIMENTAL_RERANK_TOP
+        if enable_reranker and plan.retrieval_mode == "hybrid_rerank"
+        else 0,
     )
 
 

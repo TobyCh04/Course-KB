@@ -239,7 +239,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--rerank-top", type=int, default=DEFAULT_RERANK_TOP,
-        help="Fused candidates to rerank; 0 explicitly disables reranking",
+        help="Fused candidates to rerank; default 0 (RRF-only); set >0 to opt in",
     )
     parser.add_argument(
         "--rerank-server", default="",

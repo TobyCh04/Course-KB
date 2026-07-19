@@ -1,8 +1,8 @@
 # Step 6: OpenViking Retrieval Backend — Detailed Plan
 
-**Status:** Steps 6.4, 6.5, and Step 6.6 are complete; the realistic planner/reranker source-read retest and initial blend checkpoint are complete. **Current checkpoint:** planner-format replay of 10 Cornell queries routes lexical text to BM25 and semantic text to dense retrieval in one RRF call, repairs stale readable URIs, uses query-focused source context plus metadata, and evaluates final source reads. Hybrid without reranking achieved 70% read hit@5, 70% top-1 support, and 0.700 MRR; the initial normalized 70/30 RRF-to-reranker blend achieved 60%, 60%, and 0.600 MRR; both had zero final read errors. Full offline suite: 97 tests passed. EmbeddingGemma A/B was not promoted; BGE-small remains production; DeepSeek V4 Flash remains the active production VLM.
+**Status:** Steps 6.4, 6.5, and Step 6.6 are complete; the realistic planner/source-read evaluation and initial blend checkpoint are complete. **Current policy:** hybrid BM25+dense RRF is the default production retrieval path. The reranker and normalized 70/30 blend remain installed and documented, but are opt-in only and deferred until actual course material is available. Production remains on BGE-small embeddings with DeepSeek V4 Flash as the active production VLM. Full offline suite: 99 tests passed.
 **Created:** 2026-07-16
-**Last checkpoint:** 2026-07-19 02:49:07 -0500 — URI repair, context/metadata reranking, role-aware planner execution, source-read evaluation, and the initial normalized 70/30 RRF-to-reranker blend checkpoint verified. Operational evidence remains in `openviking/STATUS.md` and `test_runs/planner_source_read_reranker_report.md`.
+**Last checkpoint:** 2026-07-19 03:19:28 -0500 — RRF-only default execution, retained opt-in reranker path, direct CLI entrypoint verification, and course-material-first next gate verified. Operational evidence remains in `openviking/STATUS.md` and `test_runs/planner_source_read_reranker_report.md`.
 **Depends on:** Step 1 (Whisper/MOSS), Step 2 (pymupdf/GLM-OCR/Qwen3-VL), Step 3 (Hindsight metadata and ingestion), Step 4 (lecture note generation)
 
 ---

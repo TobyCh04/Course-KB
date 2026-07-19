@@ -133,3 +133,17 @@ def test_cmd_health_reports_error_on_failure():
 
     assert result["status"] == "error"
     assert "error" in result
+
+
+def test_direct_search_script_help_entrypoint_runs():
+    import subprocess
+
+    completed = subprocess.run(
+        [sys.executable, str(PROJECT_ROOT / "scripts" / "search.py"), "--help"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0
+    assert "Cornell KB source-grounded retrieval" in completed.stdout

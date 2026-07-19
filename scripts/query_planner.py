@@ -70,7 +70,7 @@ class QueryPlanner:
         if self.llm is None:
             trace.status = "planner_failed"
             trace.fallback_used = True
-            trace.warning = "Query planner unavailable. Used original query with deterministic retrieval."
+            trace.warning = "Query planner unavailable. Used original query with deterministic hybrid RRF retrieval."
             trace.add_error("no planner LLM callable configured")
             return PlanningResult(self._fallback(query, trace_id), trace)
 
@@ -89,7 +89,7 @@ class QueryPlanner:
         trace.fallback_used = True
         trace.warning = (
             f"Query planner failed after {trace.planner_attempts} attempts. "
-            "Used original query with deterministic hybrid retrieval and reranking."
+            "Used original query with deterministic hybrid RRF retrieval."
         )
         return PlanningResult(self._fallback(query, trace_id), trace)
 
@@ -118,7 +118,7 @@ class QueryPlanner:
             trace.add_error(error)
             trace.warning = (
                 "Active Hermes model returned an invalid query plan. "
-                "Used original query with deterministic hybrid retrieval and reranking."
+                "Used original query with deterministic hybrid RRF retrieval."
             )
             return PlanningResult(self._fallback(query, trace.trace_id), trace)
         trace.status = "planned"
@@ -143,7 +143,7 @@ JSON shape:
     {{"text": "natural-language semantic retrieval query", "role": "semantic"}}
   ],
   "filters": {{}},
-  "retrieval_mode": "hybrid_rerank",
+  "retrieval_mode": "hybrid",
   "limit": 5
 }}
 
@@ -292,7 +292,7 @@ not supported by the original query."""
             backends=("openviking",),
             queries=(PlannedQuery(query, query, trace_id),),
             filters=QueryFilters(),
-            retrieval_mode="hybrid_rerank",
+            retrieval_mode="hybrid",
             limit=self.default_limit,
             trace_id=trace_id,
             planner_model=self.model,

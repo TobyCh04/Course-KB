@@ -312,6 +312,25 @@ def test_hybrid_search_applies_optional_rrf_reranker_blend(tmp_path, monkeypatch
     assert result["source_cutoff"]["score_key"] == "blend_score"
 
 
+def test_hybrid_search_defaults_to_rrf_only(tmp_path, monkeypatch):
+    backend = CornellOpenVikingBackend(FakeSearchClient())
+    index_path = _write_lexical_index(tmp_path, {"kanban": []})
+    rerank_called = []
+
+    monkeypatch.setattr(
+        hr.reranker_mod,
+        "rerank_candidates",
+        lambda *args, **kwargs: rerank_called.append(True),
+    )
+    result = hr.hybrid_search(
+        backend, "kanban", index_path=index_path,
+        search_limit=3, lexical_limit=3, top_k=2,
+    )
+
+    assert result["mode"] == "dense_plus_lexical"
+    assert rerank_called == []
+
+
 def test_hybrid_search_defaults_to_reranking_and_records_cutoff(tmp_path, monkeypatch):
     backend = CornellOpenVikingBackend(FakeSearchClient())
     index_path = _write_lexical_index(tmp_path, {"kanban": []})
@@ -324,7 +343,7 @@ def test_hybrid_search_defaults_to_reranking_and_records_cutoff(tmp_path, monkey
     monkeypatch.setattr(hr.reranker_mod, "rerank_candidates", _fake_rerank)
     result = hr.hybrid_search(
         backend, "kanban", index_path=index_path,
-        search_limit=3, lexical_limit=3, top_k=2,
+        search_limit=3, lexical_limit=3, top_k=2, rerank_top=3,
     )
 
     assert result["mode"] == "dense_lexical_reranker"

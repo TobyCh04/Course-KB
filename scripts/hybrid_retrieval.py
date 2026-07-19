@@ -34,7 +34,8 @@ DEFAULT_SEARCH_LIMIT = 20
 DEFAULT_LEXICAL_LIMIT = 20
 DEFAULT_TOP_K = 5
 DEFAULT_MAX_SOURCES = 8
-DEFAULT_RERANK_TOP = 20
+DEFAULT_RERANK_TOP = 0
+DEFAULT_EXPERIMENTAL_RERANK_TOP = 20
 DEFAULT_RERANK_SCORE_DROP = 0.15
 DEFAULT_RERANK_RELATIVE_FLOOR = 0.08
 DEFAULT_FUSED_SCORE_DROP = 0.005
@@ -415,7 +416,12 @@ def hybrid_search(
     blend_rrf_weight: float | None = None,
     blend_reranker_weight: float = DEFAULT_BLEND_RERANKER_WEIGHT,
 ) -> dict[str, Any]:
-    """Search, fuse, read, and rerank with production-safe source context."""
+    """Search, fuse, read, and optionally rerank with production-safe source context.
+
+    RRF-only is the default. Pass ``rerank_top > 0`` explicitly for the
+    experimental reranker path; the reranker is retained for future course-data
+    evaluation but is not part of normal retrieval.
+    """
     dense_query = dense_query or query
     lexical_query = lexical_query or query
     rerank_query = _combined_rerank_query(dense_query, lexical_query)
@@ -599,7 +605,7 @@ def main() -> int:
     )
     search_parser.add_argument(
         "--rerank-top", type=int, default=DEFAULT_RERANK_TOP,
-        help="Fused candidates to rerank; 0 explicitly disables reranking",
+        help="Fused candidates to rerank; default 0 (RRF-only); set >0 to opt in",
     )
     search_parser.add_argument(
         "--rerank-server", default="",

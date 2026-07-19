@@ -72,7 +72,7 @@ def test_planner_retries_then_surfaces_warning_and_fallback():
     assert result.trace.errors
     assert result.plan.status == "fallback"
     assert result.plan.queries[0].text == "kanban formula"
-    assert result.plan.retrieval_mode == "hybrid_rerank"
+    assert result.plan.retrieval_mode == "hybrid"
 
 
 def test_planner_falls_back_on_malformed_json():
@@ -236,10 +236,35 @@ def test_orchestrator_passes_blend_weights_to_hybrid_backend(tmp_path):
         index_path=tmp_path / "index.json",
         blend_rrf_weight=0.70,
         blend_reranker_weight=0.30,
+        enable_reranker=True,
     )
 
     assert calls[0]["blend_rrf_weight"] == 0.70
     assert calls[0]["blend_reranker_weight"] == 0.30
+    assert calls[0]["rerank_top"] == 20
+
+
+def test_orchestrator_defaults_to_rrf_even_when_plan_requests_rerank(tmp_path):
+    backend = CornellOpenVikingBackend(FakeClient())
+    calls = []
+
+    def hybrid(query, **kwargs):
+        calls.append(kwargs)
+        return {
+            "mode": "dense_plus_lexical",
+            "results": [
+                {"uri": f"{CORNELL_NAMESPACE}/doc/a", "fused_score": 0.03}
+            ],
+        }
+
+    backend.hybrid_search = hybrid
+    import json
+    planning = QueryPlanner(
+        lambda prompt: json.dumps(_response(retrieval_mode="hybrid_rerank"))
+    ).plan("kanban formula")
+    execute_planned_query(planning, backend, index_path=tmp_path / "index.json")
+
+    assert calls[0]["rerank_top"] == 0
 
 
 class FakeClient:

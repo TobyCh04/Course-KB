@@ -168,6 +168,7 @@ def _run_mode(
         index_path=index_path,
         blend_rrf_weight=blend_rrf_weight,
         blend_reranker_weight=blend_reranker_weight,
+        enable_reranker=blend_rrf_weight is not None,
     )
     return {
         "plan": result["plan"],
