@@ -208,6 +208,40 @@ def test_orchestrator_executes_lexical_and_semantic_queries(tmp_path):
     assert len(result["results"]) == 2
 
 
+def test_orchestrator_passes_blend_weights_to_hybrid_backend(tmp_path):
+    backend = CornellOpenVikingBackend(FakeClient())
+    calls = []
+
+    def hybrid(query, **kwargs):
+        calls.append(kwargs)
+        return {
+            "mode": "dense_lexical_blend",
+            "results": [
+                {
+                    "uri": f"{CORNELL_NAMESPACE}/doc/a",
+                    "fused_score": 0.03,
+                    "rerank_score": 0.9,
+                    "blend_score": 0.8,
+                }
+            ],
+        }
+
+    backend.hybrid_search = hybrid
+    import json
+    response = _response()
+    planning = QueryPlanner(lambda prompt: json.dumps(response)).plan("kanban formula")
+    execute_planned_query(
+        planning,
+        backend,
+        index_path=tmp_path / "index.json",
+        blend_rrf_weight=0.70,
+        blend_reranker_weight=0.30,
+    )
+
+    assert calls[0]["blend_rrf_weight"] == 0.70
+    assert calls[0]["blend_reranker_weight"] == 0.30
+
+
 class FakeClient:
     def search(self, **kwargs):
         return {

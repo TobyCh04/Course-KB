@@ -1,0 +1,68 @@
+{
+  "benchmark_name": "cornell-source-read-initial-blend",
+  "version": 1,
+  "description": "Initial 10-query source-read checkpoint for calibrating RRF and reranker blends. Required terms are verified answer-support probes; gold URI labels remain to be expanded in the larger held-out benchmark.",
+  "gold_uri_labels_verified": false,
+  "queries": [
+    {
+      "id": "closed_loop_transfer",
+      "query": "How do you derive the closed-loop transfer function from E = V - H Y and Y = D G E?",
+      "required": ["closed-loop", "transfer", "D G", "1 + D G H"],
+      "source_hints": ["test_lecture01", "closed-loop", "control"]
+    },
+    {
+      "id": "feedback_cruise_control",
+      "query": "How does feedback control make cruise control compensate for hills?",
+      "required": ["sensor", "reference", "error", "throttle"],
+      "source_hints": ["test_lecture01", "cruise", "feedback"]
+    },
+    {
+      "id": "nyquist_criterion",
+      "query": "How does the Nyquist criterion use N = Z - P and encirclements of -1 to determine stability?",
+      "required": ["nyquist", "encirclement", "-1", "stability"],
+      "source_hints": ["freq_resp", "nyquist", "frequency"]
+    },
+    {
+      "id": "gain_phase_margin",
+      "query": "How are gain margin and phase margin found from a Bode diagram using omega1 and omega2?",
+      "required": ["gain margin", "phase margin", "omega", "bode"],
+      "source_hints": ["freq_resp", "gain", "phase"]
+    },
+    {
+      "id": "kp_stability",
+      "query": "What range of kp keeps G(s) = 10/[s(s+1)(s+9)] stable according to Routh-Hurwitz?",
+      "required": ["kp", "routh", "stable", "9"],
+      "source_hints": ["freq_resp", "kp", "routh"]
+    },
+    {
+      "id": "house_of_lean",
+      "query": "Explain the House of Lean: its roof, JIT and Jidoka pillars, foundation, and people.",
+      "required": ["roof", "jit", "jidoka", "foundation", "people"],
+      "source_hints": ["house-of-lean", "lean", "jidoka"]
+    },
+    {
+      "id": "kanban_formula",
+      "query": "How do I calculate kanban size, and what are cycle stock, buffer stock, and safety stock?",
+      "required": ["kanban", "daily demand", "lead time", "safety", "container"],
+      "source_hints": ["kanban", "lean"]
+    },
+    {
+      "id": "littles_law",
+      "query": "How does Little's Law relate inventory, throughput, and lead time in a pull system?",
+      "required": ["inventory", "throughput", "lead time"],
+      "source_hints": ["kanban", "little", "lean"]
+    },
+    {
+      "id": "feedback_limits",
+      "query": "What physical limitations prevent feedback control from making any plant behave arbitrarily?",
+      "required": ["actuator", "noise", "plant", "physical"],
+      "source_hints": ["test_lecture01", "feedback", "control"]
+    },
+    {
+      "id": "cornell_architecture",
+      "query": "What is the Cornell Knowledge Base pipeline from lecture media to study and Obsidian notes?",
+      "required": ["lecture", "hindsight", "obsidian", "study"],
+      "source_hints": ["readme", "cornell", "hindsight"]
+    }
+  ]
+}

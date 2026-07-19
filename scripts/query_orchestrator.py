@@ -20,6 +20,8 @@ def execute_planned_query(
     index_path: str | Path = "data/lexical_index.json",
     hindsight_recall: HindsightRecall | None = None,
     max_sources: int = 8,
+    blend_rrf_weight: float | None = None,
+    blend_reranker_weight: float = 0.30,
 ) -> dict[str, Any]:
     """Execute validated plan with one role-aware hybrid call per OpenViking plan."""
     plan, trace = planning.plan, planning.trace
@@ -66,6 +68,8 @@ def execute_planned_query(
                 index_path=index_path,
                 dense_query=semantic.text if semantic else None,
                 lexical_query=lexical.text if lexical else None,
+                blend_rrf_weight=blend_rrf_weight,
+                blend_reranker_weight=blend_reranker_weight,
             )
             provenance = [query.text for query in openviking_queries]
             merge_result(result, provenance)
@@ -140,6 +144,8 @@ def _execute_openviking(
     index_path: str | Path,
     dense_query: str | None = None,
     lexical_query: str | None = None,
+    blend_rrf_weight: float | None = None,
+    blend_reranker_weight: float = 0.30,
 ) -> dict[str, Any]:
     if plan.retrieval_mode == "dense":
         raw = backend.search(dense_query or query, limit=plan.limit)
@@ -151,6 +157,8 @@ def _execute_openviking(
         max_sources=8,
         dense_query=dense_query,
         lexical_query=lexical_query,
+        blend_rrf_weight=blend_rrf_weight,
+        blend_reranker_weight=blend_reranker_weight,
         rerank_top=0 if plan.retrieval_mode == "hybrid" else 20,
     )
 

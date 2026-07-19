@@ -93,6 +93,33 @@ def test_reciprocal_rank_fusion_respects_weights():
     assert merged[1]["uri"] == "viking://resources/cornell-kb/b"
 
 
+def test_blend_candidate_scores_normalizes_rrf_and_reranker_components():
+    candidates = [
+        {"uri": "a", "fused_score": 0.0328, "rerank_score": 0.40},
+        {"uri": "b", "fused_score": 0.0300, "rerank_score": 0.90},
+        {"uri": "c", "fused_score": 0.0270, "rerank_score": 0.20},
+    ]
+
+    blended = hr.blend_candidate_scores(
+        candidates, rrf_weight=0.70, reranker_weight=0.30,
+    )
+
+    assert [item["uri"] for item in blended] == ["a", "b", "c"]
+    assert blended[0]["blend_weights"] == {"rrf": 0.7, "reranker": 0.3}
+    assert blended[0]["rrf_score_normalized"] == pytest.approx(1.0)
+    assert blended[0]["reranker_score_normalized"] == pytest.approx(0.2857, abs=1e-4)
+    assert blended[0]["blend_score"] == pytest.approx(0.7857, abs=1e-4)
+
+
+def test_blend_candidate_scores_rejects_invalid_weights():
+    with pytest.raises(ValueError, match="weights must be in the range"):
+        hr.blend_candidate_scores(
+            [{"uri": "a", "fused_score": 1.0, "rerank_score": 1.0}],
+            rrf_weight=1.1,
+            reranker_weight=-0.1,
+        )
+
+
 def test_reciprocal_rank_fusion_merges_chunk_resources_by_canonical_uri():
     """Dense URIs from OpenViking chunks and lexical URIs from the BM25 index
     share the same parent directory but differ in the trailing filename.
@@ -260,6 +287,29 @@ def test_hybrid_search_reranker_flag(tmp_path, monkeypatch):
     assert result["mode"] == "dense_lexical_reranker"
     assert "rerank_latency_ms" in result
     assert rerank_called
+
+
+def test_hybrid_search_applies_optional_rrf_reranker_blend(tmp_path, monkeypatch):
+    backend = CornellOpenVikingBackend(FakeSearchClient())
+    index_path = _write_lexical_index(tmp_path, {"kanban": []})
+
+    def _fake_rerank(query, candidates, **kwargs):
+        for index, candidate in enumerate(candidates):
+            candidate["rerank_score"] = [0.4, 0.9, 0.2][index]
+        return candidates
+
+    monkeypatch.setattr(hr.reranker_mod, "rerank_candidates", _fake_rerank)
+    result = hr.hybrid_search(
+        backend, "kanban", index_path=index_path,
+        search_limit=3, lexical_limit=3, top_k=1, rerank_top=3,
+        blend_rrf_weight=0.70, blend_reranker_weight=0.30,
+    )
+
+    assert result["mode"] == "dense_lexical_blend"
+    assert result["blend"]["rrf_weight"] == 0.7
+    assert result["blend"]["reranker_weight"] == 0.3
+    assert result["results"][0]["blend_score"] >= result["results"][0]["fused_score"]
+    assert result["source_cutoff"]["score_key"] == "blend_score"
 
 
 def test_hybrid_search_defaults_to_reranking_and_records_cutoff(tmp_path, monkeypatch):

@@ -255,6 +255,72 @@ def _dedupe_by_canonical_uri(results: list[dict[str, Any]]) -> list[dict[str, An
     return deduped
 
 
+DEFAULT_BLEND_RRF_WEIGHT = 0.70
+DEFAULT_BLEND_RERANKER_WEIGHT = 0.30
+DEFAULT_BLEND_SCORE_DROP = 0.15
+
+
+def _minmax_normalize(values: list[float]) -> list[float]:
+    if not values:
+        return []
+    low = min(values)
+    high = max(values)
+    if high == low:
+        return [1.0] * len(values)
+    return [(value - low) / (high - low) for value in values]
+
+
+def blend_candidate_scores(
+    candidates: list[dict[str, Any]],
+    *,
+    rrf_weight: float = DEFAULT_BLEND_RRF_WEIGHT,
+    reranker_weight: float = DEFAULT_BLEND_RERANKER_WEIGHT,
+) -> list[dict[str, Any]]:
+    """Blend normalized RRF and reranker scores without changing provenance.
+
+    RRF scores and cross-encoder logits have unrelated scales. Min-max
+    normalization is applied within the same candidate pool before the
+    weighted blend, and fused score remains the deterministic tie-breaker.
+    """
+    if not 0 <= rrf_weight <= 1 or not 0 <= reranker_weight <= 1:
+        raise ValueError("weights must be in the range [0, 1]")
+    if abs((rrf_weight + reranker_weight) - 1.0) > 1e-9:
+        raise ValueError("weights must sum to 1")
+    if not candidates:
+        return []
+    if any("fused_score" not in item or "rerank_score" not in item for item in candidates):
+        raise ValueError("every candidate must contain fused_score and rerank_score")
+
+    fused = [float(item["fused_score"]) for item in candidates]
+    reranked = [float(item["rerank_score"]) for item in candidates]
+    fused_normalized = _minmax_normalize(fused)
+    reranker_normalized = _minmax_normalize(reranked)
+    blended: list[dict[str, Any]] = []
+    for item, fused_value, reranker_value in zip(
+        candidates, fused_normalized, reranker_normalized,
+    ):
+        candidate = dict(item)
+        candidate["rrf_score_normalized"] = round(fused_value, 6)
+        candidate["reranker_score_normalized"] = round(reranker_value, 6)
+        candidate["blend_score"] = round(
+            rrf_weight * fused_value + reranker_weight * reranker_value, 6
+        )
+        candidate["blend_weights"] = {
+            "rrf": rrf_weight,
+            "reranker": reranker_weight,
+        }
+        blended.append(candidate)
+    blended.sort(
+        key=lambda item: (
+            item["blend_score"],
+            float(item.get("fused_score", 0.0)),
+            float(item.get("rerank_score", 0.0)),
+        ),
+        reverse=True,
+    )
+    return blended
+
+
 def select_final_sources(
     candidates: list[dict[str, Any]],
     *,
@@ -263,6 +329,7 @@ def select_final_sources(
     reranked: bool = True,
     score_drop: float | None = None,
     relative_floor: float | None = None,
+    score_key: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Select a bounded source set using a score-drop cutoff.
 
@@ -276,11 +343,18 @@ def select_final_sources(
         raise ValueError("source limits must satisfy 1 <= default_limit <= max_sources")
     if not candidates:
         return [], {"selected_count": 0, "cutoff_reason": "no_candidates"}
-    score_key = "rerank_score" if reranked and "rerank_score" in candidates[0] else (
+    score_key = score_key or ("rerank_score" if reranked and "rerank_score" in candidates[0] else (
         "fused_score" if "fused_score" in candidates[0] else "score"
-    )
+    ))
+    if score_key not in candidates[0]:
+        raise ValueError(f"score key {score_key!r} is missing from candidates")
     if score_drop is None:
-        score_drop = DEFAULT_RERANK_SCORE_DROP if score_key == "rerank_score" else DEFAULT_FUSED_SCORE_DROP
+        if score_key == "rerank_score":
+            score_drop = DEFAULT_RERANK_SCORE_DROP
+        elif score_key == "blend_score":
+            score_drop = DEFAULT_BLEND_SCORE_DROP
+        else:
+            score_drop = DEFAULT_FUSED_SCORE_DROP
     if relative_floor is None and score_key == "rerank_score":
         relative_floor = DEFAULT_RERANK_RELATIVE_FLOOR
     if relative_floor is not None and not 0 < relative_floor <= 1:
@@ -338,6 +412,8 @@ def hybrid_search(
     dense_query: str | None = None,
     lexical_query: str | None = None,
     context_chars: int = reranker_mod.DEFAULT_CONTEXT_CHARS,
+    blend_rrf_weight: float | None = None,
+    blend_reranker_weight: float = DEFAULT_BLEND_RERANKER_WEIGHT,
 ) -> dict[str, Any]:
     """Search, fuse, read, and rerank with production-safe source context."""
     dense_query = dense_query or query
@@ -392,15 +468,37 @@ def hybrid_search(
         ) if rerank_candidates else []
         rerank_ms = round((time.monotonic() - rerank_start) * 1000, 2)
         has_rerank_scores = any("rerank_score" in c for c in reranked)
-        result["mode"] = "dense_lexical_reranker" if has_rerank_scores else "dense_lexical_fallback"
+        blend_active = blend_rrf_weight is not None and has_rerank_scores
+        if blend_active:
+            reranked = blend_candidate_scores(
+                reranked,
+                rrf_weight=blend_rrf_weight,
+                reranker_weight=blend_reranker_weight,
+            )
+            result["mode"] = "dense_lexical_blend"
+            result["blend"] = {
+                "rrf_weight": blend_rrf_weight,
+                "reranker_weight": blend_reranker_weight,
+                "normalization": "candidate_pool_minmax",
+            }
+        else:
+            result["mode"] = "dense_lexical_reranker" if has_rerank_scores else "dense_lexical_fallback"
+            if blend_rrf_weight is not None:
+                result["blend"] = {
+                    "enabled": False,
+                    "reason": "reranker_scores_unavailable",
+                    "rrf_weight": blend_rrf_weight,
+                    "reranker_weight": blend_reranker_weight,
+                }
         result["rerank_latency_ms"] = rerank_ms if has_rerank_scores else None
         result["rerank_candidates"] = len(reranked)
         selected, cutoff = select_final_sources(
             reranked,
             default_limit=top_k,
             max_sources=max_sources,
-            reranked=has_rerank_scores,
-            score_drop=rerank_score_drop,
+            reranked=has_rerank_scores and not blend_active,
+            score_drop=DEFAULT_BLEND_SCORE_DROP if blend_active else rerank_score_drop,
+            score_key="blend_score" if blend_active else None,
         )
         result["results"] = selected
         result["source_cutoff"] = cutoff
