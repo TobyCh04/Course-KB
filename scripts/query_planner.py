@@ -32,10 +32,18 @@ _MAX_REWRITTEN_QUERY = 1000
 _ALLOWED_RESPONSE_KEYS = frozenset({"intent", "backends", "queries", "filters", "retrieval_mode", "limit"})
 _QUERY_ROLES = frozenset({"lexical"})
 _KEYWORD_STOPWORDS = frozenset({
-    "a", "an", "and", "are", "about", "can", "definition", "definitions",
-    "does", "explain", "find", "for", "formula", "formulas", "give", "how",
-    "in", "information", "is", "me", "of", "on", "please", "related", "show",
-    "tell", "the", "things", "to", "what", "whats", "what's", "with",
+    "a", "about", "an", "and", "are", "affect", "calculate", "can", "compare",
+    "consider", "create", "definition", "definitions", "determine", "does",
+    "do", "explain", "find", "for", "formula", "formulas", "from", "give",
+    "how", "in", "increasing", "information", "is", "me", "not", "obtain",
+    "of", "on", "please", "related", "show", "tell", "the", "things", "to",
+    "what", "whats", "what's", "why", "with", "you", "your", "we", "our",
+    "they", "their", "derive", "describe", "discuss", "analyze", "evaluate",
+    "identify", "list", "state", "compute", "obtained", "computed",
+    "when", "have", "has", "had", "been", "being", "was", "were", "calculated",
+    "evaluated", "increases", "decreases", "use", "used", "using", "found",
+    "i", "its", "it", "according", "making", "make", "any", "behave",
+    "arbitrarily", "relate", "keeps", "prevent", "prevents",
 })
 _ASSESSMENT_RE = re.compile(
     r"\b(homework|assignment|problem\s+set|exam|midterm|final|test\s+question|practice\s+problem)s?\b",
