@@ -677,7 +677,7 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    backend = CornellOpenVikingBackend(base_url=args.url, timeout=30)
+    backend = CornellOpenVikingBackend(base_url=args.url, timeout=30, root=Path.cwd())
     index_path = Path(args.index_path)
 
     if args.command == "search":

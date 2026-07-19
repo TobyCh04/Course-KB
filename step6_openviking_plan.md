@@ -1,8 +1,8 @@
 # Step 6: OpenViking Retrieval Backend — Detailed Plan
 
-**Status:** Steps 6.4, 6.5, and Step 6.6 are complete; the realistic planner/source-read evaluation, initial blend checkpoint, and explicit metadata/filter propagation are complete. **Current policy:** hybrid BM25+dense RRF is the default production retrieval path. The reranker and normalized 70/30 blend remain installed and documented, but are opt-in only and deferred until actual course material is available. Production remains on BGE-small embeddings with DeepSeek V4 Flash as the active production VLM. Full offline suite: 107 tests passed.
+**Status:** Steps 6.4, 6.5, and Step 6.6 are complete; the realistic planner/source-read evaluation, initial blend checkpoint, explicit metadata/filter propagation, and the 32-source ingestion gate are complete. **Current policy:** hybrid BM25+dense RRF is the default production retrieval path. The reranker and normalized 70/30 blend remain installed and documented, but are opt-in only and deferred until actual course material is available. Production remains on BGE-small embeddings with DeepSeek V4 Flash as the active production VLM. Full offline suite: 113 tests passed.
 **Created:** 2026-07-16
-**Last checkpoint:** 2026-07-19 04:18:20 -0500 — explicit course/lecture/source-type/semester/date filter propagation, RRF-only default execution, retained opt-in reranker path, and course-material-first next gate verified. Operational evidence remains in `openviking/STATUS.md` and `test_runs/planner_source_read_reranker_report.md`.
+**Last checkpoint:** 2026-07-19 05:29:46 -0500 — 32-source manifest validation, 15 TEST PDF ingestion, canonical-root/source-read verification, and RRF-only default execution verified. Operational evidence remains in `openviking/STATUS.md` and `test_runs/planner_source_read_reranker_report.md`.
 **Depends on:** Step 1 (Whisper/MOSS), Step 2 (pymupdf/GLM-OCR/Qwen3-VL), Step 3 (Hindsight metadata and ingestion), Step 4 (lecture note generation)
 
 ---

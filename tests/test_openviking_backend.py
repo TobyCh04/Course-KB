@@ -1,3 +1,5 @@
+import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -74,6 +76,30 @@ def test_transcript_is_indexed_without_audio_metadata(tmp_path):
         "lecture": 1,
         "source_type": "transcript",
     }
+
+
+def test_index_file_carries_manifest_metadata_in_ingestion_reason(tmp_path):
+    source = tmp_path / "homework.txt"
+    source.write_text("test source", encoding="utf-8")
+    client = FakeOpenVikingClient()
+    backend = CornellOpenVikingBackend(client, root=tmp_path)
+
+    backend.index_file(
+        source,
+        source_type="homework",
+        course="TEST",
+        metadata={
+            "semester": "TEST",
+            "corpus": "test",
+            "source_hash": "a" * 64,
+        },
+    )
+
+    reason = client.add_calls[0]["reason"]
+    assert "course=TEST" in reason
+    assert "semester=TEST" in reason
+    assert "corpus=test" in reason
+    assert "source_hash=" + ("a" * 64) in reason
 
 
 def test_dry_run_validates_transcript_without_uploading(tmp_path):
@@ -166,6 +192,47 @@ def test_search_applies_metadata_filters_after_dense_retrieval():
     ]
     assert client.search_calls[0]["limit"] == 10
     assert "filters" not in client.search_calls[0]
+
+
+def test_search_merges_manifest_metadata_for_filters_not_in_uri(tmp_path):
+    source = tmp_path / "homework.pdf"
+    source.write_bytes(b"test pdf")
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    manifest_path = tmp_path / "config" / "source_manifest.json"
+    manifest_path.parent.mkdir()
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "sources": [
+                    {
+                        "source_path": str(source),
+                        "source_hash": source_hash,
+                        "source_type": "homework",
+                        "course": "TEST",
+                        "semester": "TEST",
+                        "corpus": "test",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    canonical = resource_uri(source, course="TEST", source_type="homework", root=tmp_path)
+    client = FakeOpenVikingClient(
+        search_response={
+            "resources": [
+                {"uri": f"{canonical}/.overview.md", "score": 0.9},
+            ]
+        }
+    )
+    backend = CornellOpenVikingBackend(client, root=tmp_path)
+
+    result = backend.search("homework", filters={"semester": "TEST"})
+
+    assert [item["uri"] for item in result["resources"]] == [
+        f"{canonical}/.overview.md"
+    ]
+    assert result["filters_applied"] == {"semester": "TEST"}
 
 
 def test_read_repairs_stale_filename_to_canonical_tree_uri():

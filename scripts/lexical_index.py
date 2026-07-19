@@ -288,9 +288,15 @@ def build_lexical_index(
         # URI identity must match the ingestion metadata supplied by the caller.
         # Inferred JSON metadata is semantic filter data, not a new OpenViking URI.
         uri_source_type = provided_fields.get("source_type", "cornell-source")
+        uri_source_path = provided_fields.get("uri_source_path", path)
         uri_course = provided_fields.get("course")
-        uri = resource_uri(path, course=uri_course, source_type=uri_source_type, root=root)
-        uri = f"{uri}/{path.name}"
+        uri = resource_uri(
+            uri_source_path,
+            course=uri_course,
+            source_type=uri_source_type,
+            root=root,
+        )
+        uri = f"{uri}/{Path(uri_source_path).name}"
         corpus_tokens.append(tokens)
         uris.append(uri)
         # Abstract is the first non-empty lines plus a few headings.

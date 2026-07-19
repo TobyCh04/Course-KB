@@ -9,6 +9,7 @@ client injectable so tests never contact the live service.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -80,6 +81,10 @@ def metadata_matches(metadata: dict[str, Any] | None, filters: dict[str, Any] | 
             actual_course = "".join(char for char in str(value).casefold() if char.isalnum())
             expected_course = "".join(char for char in expected.casefold() if char.isalnum())
             if actual_course != expected_course:
+                return False
+        elif key == "source_type":
+            actual_type = "source" if str(value).casefold() == "cornell-source" else str(value)
+            if actual_type.casefold() != expected.casefold():
                 return False
         elif str(value).casefold() != expected.casefold():
             return False
@@ -181,6 +186,15 @@ def resource_uri(
     return f"{CORNELL_NAMESPACE}/{'/'.join(parts)}-{digest}"
 
 
+def canonical_resource_root(uri: str) -> str:
+    """Return the manifest-addressable resource root for a leaf URI."""
+    prefix = CORNELL_NAMESPACE + "/"
+    if not uri.startswith(prefix):
+        return uri
+    parts = uri.removeprefix(prefix).split("/")
+    return prefix + "/".join(parts[:3]) if len(parts) >= 3 else uri
+
+
 class CornellOpenVikingBackend:
     """Index and retrieve Cornell source artifacts through OpenViking."""
 
@@ -198,6 +212,54 @@ class CornellOpenVikingBackend:
         self._client = client
         self._uri_repair_cache: dict[str, str | None] = {}
         self._resource_files_cache: list[dict[str, Any]] | None = None
+        self._manifest_metadata = self._load_manifest_metadata()
+
+    def _load_manifest_metadata(self) -> dict[str, dict[str, Any]]:
+        if self.root is None:
+            return {}
+        manifest_path = self.root / "config" / "source_manifest.json"
+        if not manifest_path.is_file():
+            return {}
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        metadata_by_root: dict[str, dict[str, Any]] = {}
+        for entry in data.get("sources", []):
+            if not isinstance(entry, dict) or not entry.get("source_path"):
+                continue
+            path = Path(str(entry["source_path"])).expanduser()
+            if not path.is_absolute():
+                path = self.root / path
+            uri = resource_uri(
+                path,
+                course=entry.get("course"),
+                source_type=entry.get("source_type", "source"),
+                root=self.root,
+            )
+            metadata_by_root[canonical_resource_root(uri)] = {
+                key: entry[key]
+                for key in (
+                    "course",
+                    "lecture",
+                    "source_type",
+                    "semester",
+                    "date",
+                    "corpus",
+                    "source_hash",
+                )
+                if entry.get(key) is not None
+            }
+        return metadata_by_root
+
+    def _metadata_for_resource(self, resource: dict[str, Any]) -> dict[str, Any]:
+        metadata = resource_metadata(resource)
+        manifest_metadata = self._manifest_metadata.get(
+            canonical_resource_root(str(resource.get("uri", ""))),
+            {},
+        )
+        metadata.update(manifest_metadata)
+        return metadata
 
     @property
     def client(self) -> OpenVikingClient:
@@ -241,7 +303,7 @@ class CornellOpenVikingBackend:
             to=uri,
             wait=True,
             timeout=self.timeout,
-            reason=_reason(source_type, course, lecture),
+            reason=_reason(source_type, course, lecture, safe_metadata),
             preserve_structure=True,
         )
         return IndexedResource(str(path), uri, source_type, course, lecture, safe_metadata, result)
@@ -340,7 +402,7 @@ class CornellOpenVikingBackend:
         filtered = dict(raw)
         resources = [
             resource for resource in raw.get("resources", [])
-            if metadata_matches(resource_metadata(resource), normalized_filters)
+            if metadata_matches(self._metadata_for_resource(resource), normalized_filters)
         ]
         filtered["resources"] = resources
         filtered["total"] = len(resources)
@@ -401,12 +463,21 @@ def _safe_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
     return safe
 
 
-def _reason(source_type: str, course: str | None, lecture: int | None) -> str:
-    details = ["Cornell KB source ingestion", source_type]
+def _reason(
+    source_type: str,
+    course: str | None,
+    lecture: int | None,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    details = ["Cornell KB source ingestion", f"source_type={source_type}"]
     if course:
-        details.append(course)
+        details.append(f"course={course}")
     if lecture is not None:
         details.append(f"lecture {lecture}")
+    if metadata:
+        for key in ("semester", "date", "corpus", "source_hash"):
+            if metadata.get(key) is not None:
+                details.append(f"{key}={metadata[key]}")
     return " — ".join(details)
 
 

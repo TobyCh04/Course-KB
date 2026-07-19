@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "hash_algorithm": "sha256",
+  "lecture_policy": "optional; omit for homework, exams, textbooks, or material spanning multiple lectures",
+  "required_fields": ["source_path", "source_hash", "source_type"],
+  "optional_fields": ["course", "semester", "date", "lecture", "corpus", "file_name", "derived_text_path", "derived_hash"],
+  "sources": [
+    {
+      "source_path": "config/course_catalog.yaml",
+      "source_hash": "e4105b8aeda88a1a89456cdea0ecb46d18ef3460a077250223f5851e5735ff1e",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "data/freq_response_diagrams.json",
+      "source_hash": "76694a2511f9c7bc83cb842f3556f3c0709096fed223c681e9add06be253fa41",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "data/freq_response_part2.json",
+      "source_hash": "4786687c8335f51d18dbf3b176322cc9a5863086fb017da5153e2a4d14838521",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/BOOK_OVERVIEW.md",
+      "source_hash": "9bed824748fdce62e1c7f31419944de0ad82aca6a9aaf2b0541c804e4333a0d0",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/cellular-manufacturing/SKILL.md",
+      "source_hash": "5e7b26fdf2acd3aa4fb507c0aa4d5cd2dbbac04636e127ddf6b9d57e1e2fbd27",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/constraint-management/SKILL.md",
+      "source_hash": "5102dee4b20926e40d2e595b59ce32597cfebbe03b4e871523336b57d76044d5",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/cultural-change/SKILL.md",
+      "source_hash": "45bfb52b845cdeabd32d9260b7e507a0cc6a111749a530c1cf7f422d8fabf2dc",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/four-strategies/SKILL.md",
+      "source_hash": "3588b223ab1a7021fadd0c9a40b2c6dd8ee3dceb477ab6d75b113739cb09ee50",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/house-of-lean/SKILL.md",
+      "source_hash": "c908f32b03cf121c924c66c3e67776e5d275a321e46a3a6e5e19d1b540407408",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/INDEX.md",
+      "source_hash": "fdfb2058d1b2473d27a2cc9adfee5ee54b6aa7c28290554899b00e8130931304",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/kanban-calculation/SKILL.md",
+      "source_hash": "2a6f107c02d5c7a25928ed2771b635829b168a5b805a963f013f220fbb7eb0ec",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/lead-time-analysis/SKILL.md",
+      "source_hash": "2973918d9c59937325db1c98bf5de0a7b0a206145bb33b671114c35636b7af4a",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/lean-project-prescription/SKILL.md",
+      "source_hash": "40cde67d8843bd073f404e8581056627fa46de963855f69494c10fc8ffc7567d",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/LEARNING_NOTE.md",
+      "source_hash": "7ae89f7095ea809240f96311529684a4fdb29e0f18f72688bae14a3c60dd89dc",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/sustaining-gains/SKILL.md",
+      "source_hash": "261374a7d18ee54fa187b5f080aa6ac243b7c343a667c6204e3f33527eb56cce",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/TALKING_POINTS.md",
+      "source_hash": "5047df56bc1f75a4f59377a80447f6214edc81459b2f64cfe5fa0c6ff54dd746",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "books/lean-implementation/triple-verification.md",
+      "source_hash": "5df2857a1085da2f0d4266e7d09394eccb0052fe92edb43e93076ef3483935cb",
+      "source_type": "cornell-source",
+      "corpus": "reference"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\Control Design-Part I.pdf",
+      "file_name": "Control Design-Part I.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/Control Design-Part I.json",
+      "source_hash": "8daa2e606528a9a98f693698d26a4ed19244a859a048d079e03a9f3d8c14ec9b",
+      "source_type": "lecture",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\Laplace Transform-Part I (1).pdf",
+      "file_name": "Laplace Transform-Part I (1).pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/Laplace Transform-Part I (1).json",
+      "source_hash": "3d157b0f50c105319a8865d65a5252909bf9c495bb7b70ec06368e8801c3ccf1",
+      "source_type": "lecture",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\Modeling of Physical Systems-Part I.pdf",
+      "file_name": "Modeling of Physical Systems-Part I.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/Modeling of Physical Systems-Part I.json",
+      "source_hash": "540df9b9d064d75216e7b21429eadc854c568ced1305938e96b145f1046eb690",
+      "source_type": "lecture",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\Modeling of Physical Systems-Part II.pdf",
+      "file_name": "Modeling of Physical Systems-Part II.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/Modeling of Physical Systems-Part II.json",
+      "source_hash": "3573fdb09029dadc80ac35053079ccb955ec57ed001d76dc7c7e636bd48dd5b8",
+      "source_type": "lecture",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\Response Analysis-Part I.pdf",
+      "file_name": "Response Analysis-Part I.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/Response Analysis-Part I.json",
+      "source_hash": "12be250adeed1b487a53e1bc69eb22a224ea16e516cf759c131f4c5779cdaee4",
+      "source_type": "lecture",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\Response Analysis-Part II.pdf",
+      "file_name": "Response Analysis-Part II.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/Response Analysis-Part II.json",
+      "source_hash": "c3c2ac9edd3676869a67c51e73fb5243da8f7ca95523d11a1fbdf10530a880d5",
+      "source_type": "lecture",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\Root Locus Method.pdf",
+      "file_name": "Root Locus Method.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/Root Locus Method.json",
+      "source_hash": "94352b5b873491dd4ee0c4d9bad45e28588c13c1fc85eda53c7e236ebf0f9eac",
+      "source_type": "lecture",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\SE 402 Final Report (1).pdf",
+      "file_name": "SE 402 Final Report (1).pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/SE 402 Final Report (1).json",
+      "source_hash": "49affc4e2c11448a03fd80b3c86f41520a18c0b4ac724f2d2a7048c22bf24edf",
+      "source_type": "source",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\SE311_Project.pdf",
+      "file_name": "SE311_Project.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/SE311_Project.json",
+      "source_hash": "d21ac69bb8d3549368faa2a90abce19c2d6660b28e21c4124ca097ed0652da1d",
+      "source_type": "source",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\SE_424_HW1 Solution.pdf",
+      "file_name": "SE_424_HW1 Solution.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/SE_424_HW1 Solution.json",
+      "source_hash": "98438ad3ceb9c2424736671835bb322c77632399e683a2e75496fba3dde0d757",
+      "source_type": "homework",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\SE_424_HW2-Solution.pdf",
+      "file_name": "SE_424_HW2-Solution.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/SE_424_HW2-Solution.json",
+      "source_hash": "164c8ea0de01315fe62467d7b1f80c6350f4be727fb35ddefd2bbc729b296313",
+      "source_type": "homework",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\SE_424_HW3-Solution.pdf",
+      "file_name": "SE_424_HW3-Solution.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/SE_424_HW3-Solution.json",
+      "source_hash": "8d717d8c59fcebee6110fd0c34708e01cde7c17018acdaab72351dafbd0ba485",
+      "source_type": "homework",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\SE_424_Midterm I Solution.pdf",
+      "file_name": "SE_424_Midterm I Solution.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/SE_424_Midterm I Solution.json",
+      "source_hash": "f43fc023109fc65f765a82269d48c2674279eb01c42b565223b9c118b736780f",
+      "source_type": "exam",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\SE_424_Midterm II-Solution.pdf",
+      "file_name": "SE_424_Midterm II-Solution.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/SE_424_Midterm II-Solution.json",
+      "source_hash": "e5afd006ebbbf31004d84330c5ae4ded7db2dab77e007c8c686390a387a47586",
+      "source_type": "exam",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    },
+    {
+      "source_path": "C:\\Users\\TobyC\\shared\\Test\\SE_424_Sample-Final.pdf",
+      "file_name": "SE_424_Sample-Final.pdf",
+      "derived_text_path": "test_runs/pdf_benchmark/extracted/SE_424_Sample-Final.json",
+      "source_hash": "4d82488159f20afc5f1c1b33d46f25d733a3486bb918eac08e39844161b80620",
+      "source_type": "exam",
+      "course": "TEST",
+      "semester": "TEST",
+      "corpus": "test"
+    }
+  ]
+}

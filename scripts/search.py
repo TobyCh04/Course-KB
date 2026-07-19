@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 try:
@@ -39,7 +40,11 @@ DEFAULT_LEXICAL_INDEX_PATH = "data/lexical_index.json"
 
 def _get_backend(base_url: str, timeout: float) -> CornellOpenVikingBackend:
     """Create a backend with the real OpenViking SDK client (lazy-loaded)."""
-    return CornellOpenVikingBackend(base_url=base_url, timeout=timeout)
+    return CornellOpenVikingBackend(
+        base_url=base_url,
+        timeout=timeout,
+        root=Path.cwd(),
+    )
 
 
 def cmd_search(backend: CornellOpenVikingBackend, query: str, limit: int) -> dict[str, Any]:
