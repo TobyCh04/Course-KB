@@ -72,6 +72,42 @@ def _patch_reranker(monkeypatch):
     monkeypatch.setattr(reranker_mod, "_reranker_model_name", None)
 
 
+def test_build_query_focused_context_uses_later_relevant_passage():
+    candidate = {"uri": f"{CORNELL_NAMESPACE}/control/freq_response.md", "abstract": "generic introduction"}
+    source = "Generic introduction.\n\nUnrelated setup.\n\nNyquist criterion uses N = Z - P and encirclements of -1 for stability."
+    context = reranker_mod.build_query_focused_context(
+        "How does Nyquist determine stability?", candidate, source, max_chars=500,
+    )
+    assert "Nyquist" in context
+    assert "N = Z - P" in context
+    assert "document_family=" in context
+    assert candidate["source_metadata"]["document_family"] == "technical_reference"
+
+
+def test_reranker_prefers_explicit_context_over_abstract():
+    candidates = [
+        {"uri": f"{CORNELL_NAMESPACE}/doc/a", "abstract": "wrong topic", "rerank_context": "kanban pull system"},
+        {"uri": f"{CORNELL_NAMESPACE}/doc/b", "abstract": "kanban pull system"},
+    ]
+    result = reranker_mod.rerank_candidates("kanban pull", candidates, top_k=2)
+    assert result[0]["uri"].endswith("/doc/a")
+
+
+def test_family_signal_breaks_close_control_domain_scores(monkeypatch):
+    class CloseModel:
+        def predict(self, pairs):
+            return [0.10, 0.08]
+
+    monkeypatch.setattr(reranker_mod, "_get_reranker", lambda name: CloseModel())
+    candidates = [
+        {"uri": f"{CORNELL_NAMESPACE}/doc/lean", "abstract": "reference", "source_metadata": {"document_family": "reference"}},
+        {"uri": f"{CORNELL_NAMESPACE}/doc/control", "abstract": "Nyquist stability", "source_metadata": {"document_family": "technical_reference"}},
+    ]
+    result = reranker_mod.rerank_candidates("Nyquist stability", candidates, top_k=2)
+    assert result[0]["uri"].endswith("/doc/control")
+    assert result[0]["family_priority"] == 1
+
+
 def test_rerank_candidates_reorders_by_cross_encoder_score():
     candidates = [
         {"uri": f"{CORNELL_NAMESPACE}/doc/a", "score": 0.9, "abstract": "frequency response"},

@@ -1,8 +1,8 @@
 # Step 6: OpenViking Retrieval Backend — Detailed Plan
 
-**Status:** Step 6.4 and Step 6.5 complete. **Current:** Step 6.6 LLM-enhanced query planning and backend routing — implementation plan saved; pre-implementation hardening and tests in progress. EmbeddingGemma A/B was completed and not promoted; BGE-small remains the production embedding index; DeepSeek V4 Flash remains the active production VLM.
+**Status:** Steps 6.4, 6.5, and Step 6.6 are complete; the realistic planner/reranker source-read retest is complete. **Current checkpoint:** planner-format replay of 10 Cornell queries routes lexical text to BM25 and semantic text to dense retrieval in one RRF call, repairs stale readable URIs, uses query-focused source context plus metadata, and evaluates final source reads. Hybrid without reranking achieved 70% read hit@5 and 70% top-1 support; hybrid with the new reranker achieved 60% and 60%; zero final read errors. Full offline suite: 89 tests passed. EmbeddingGemma A/B was not promoted; BGE-small remains production; DeepSeek V4 Flash remains the active production VLM.
 **Created:** 2026-07-16
-**Last checkpoint:** 2026-07-18 05:34:33 -0500 — detailed Step 6.6 plan: `.hermes/plans/2026-07-18_053433-step-6-6-llm-enhanced-query.md`. Operational experiment evidence remains in `openviking/STATUS.md` and `openviking/test_runs/production_vlm_ab_report.md`.
+**Last checkpoint:** 2026-07-19 02:03:19 -0500 — URI repair, context/metadata reranking, role-aware planner execution, and source-read evaluation verified. Operational evidence remains in `openviking/STATUS.md` and `test_runs/planner_source_read_reranker_report.md`.
 **Depends on:** Step 1 (Whisper/MOSS), Step 2 (pymupdf/GLM-OCR/Qwen3-VL), Step 3 (Hindsight metadata and ingestion), Step 4 (lecture note generation)
 
 ---
@@ -20,8 +20,9 @@ Make OpenViking the source-grounded retrieval backend for `cornell-kb`, while re
 - EmbeddingGemma A/B setup and full isolated evaluation are complete but it was not promoted because the remote tunnel/prefix-proxy path still needs interactive-latency optimization and a held-out benchmark.
 - Curated ingestion policy v1 is enforced for the production Cornell namespace through an explicit allowlist of 17 resources; production was rebuilt and verified with zero queue errors/requeues and zero missing vectors.
 - Step 6.4 reranking and Step 6.5 BM25 + dense RRF hybrid retrieval are complete. The lexical index has been rebuilt with JSON-derived course/lecture/source metadata while preserving OpenViking URI alignment.
-- **Step 6.6 is now the active implementation step.** The detailed plan is `.hermes/plans/2026-07-18_053433-step-6-6-llm-enhanced-query.md`; the query planner itself has not been implemented.
-- Current preflight work: strict namespace regression coverage, lexical metadata/filter coverage, response-shape validation, multi-query provenance, deterministic fallback, and traceability tests.
+- **Step 6.6 core implementation is complete.** The planner requires exactly one compact `lexical` and one natural-language `semantic` query; the orchestrator routes them to BM25 and dense retrieval respectively, performs one shared RRF/reranker/read pipeline, preserves provenance, and applies one global cutoff.
+- **Realistic source-read retest complete.** Ten planner-format Cornell queries produced one hybrid execution record each. Hybrid without reranking achieved 70% read hit@5 and 70% top-1 support; the new context/metadata reranker achieved 60% and 60%; zero final source-read errors. The Kp/Routh miss is a verified corpus-coverage gap: neither branch's readable source contains `kp` or `routh`.
+- **Current next gate:** build a larger formula-heavy/multi-source source-read benchmark, calibrate a blended RRF + reranker score, add verified corpus coverage for missing technical topics, then re-test. Keep RRF without reranking as the rollback-safe production default.
 
 ### Step 6.6 terminology
 

@@ -3,13 +3,20 @@ import os
 import argparse
 import base64
 import tempfile
+import urllib.request
 
 try:
     from scripts.common_client import JsonHttpClient
+    from scripts.model_availability import ensure_ollama_available
 except ImportError:  # pragma: no cover - direct script import
     from common_client import JsonHttpClient
+    from model_availability import ensure_ollama_available
 
-_OLLAMA_CLIENT = JsonHttpClient(timeout=120, retries=2)
+_OLLAMA_CLIENT = JsonHttpClient(
+    opener=urllib.request.build_opener(urllib.request.ProxyHandler({})),
+    timeout=120,
+    retries=2,
+)
 
 # Add NVIDIA DLL dirs for faster-whisper
 nvidia_base = os.path.join(os.path.dirname(os.__file__), "site-packages", "nvidia")
@@ -25,7 +32,9 @@ if os.path.exists(nvidia_base):
     os.environ["PATH"] = ";".join(dll_paths) + ";" + os.environ.get("PATH", "")
 
 DEFAULT_OUTPUT_DIR = r"C:\Users\31163\shared\Grad\Lecture Audio"
-OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
+OLLAMA_URL = os.environ.get(
+    "CORNELL_KB_OLLAMA_URL", "http://100.104.205.105:11434/api/generate"
+)
 _MODEL_CACHE = {}
 
 
@@ -39,6 +48,42 @@ def _load_whisper_model(model_size, device, compute_type):
     return WhisperModel(model_size, device=device, compute_type=compute_type)
 
 
+def _whisper_cache_key(model_size, device, compute_type, model_loader):
+    return ("whisper", model_size, device, compute_type, id(model_loader))
+
+
+def ensure_whisper_available(
+    model_size="large-v3-turbo", device="cuda", compute_type="float16",
+    *, model_loader=None, reuse_model=True,
+):
+    """Load Whisper on demand and return a reusable runtime handle.
+
+    Whisper is not a background service. Loading the model here is the
+    on-demand equivalent of starting it; no process or OS auto-start is added.
+    """
+    model_loader = model_loader or _load_whisper_model
+    cache_key = _whisper_cache_key(model_size, device, compute_type, model_loader)
+    model = _MODEL_CACHE.get(cache_key) if reuse_model else None
+    if model is not None:
+        return {
+            "available": True, "started": False, "model": model,
+            "model_size": model_size, "device": device, "compute_type": compute_type,
+        }
+
+    try:
+        model = model_loader(model_size, device, compute_type)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Whisper model {model_size!r} is unavailable on {device}/{compute_type}: {exc}"
+        ) from exc
+    if reuse_model:
+        _MODEL_CACHE[cache_key] = model
+    return {
+        "available": True, "started": True, "model": model,
+        "model_size": model_size, "device": device, "compute_type": compute_type,
+    }
+
+
 # ── Whisper (fast, primary for single-speaker lectures) ──────────────────────
 
 def transcribe_whisper(
@@ -48,14 +93,13 @@ def transcribe_whisper(
     """Transcribe audio with a configurable, process-reusable Whisper model."""
     device = device or os.environ.get("CORNELL_KB_WHISPER_DEVICE", "cuda")
     compute_type = compute_type or os.environ.get("CORNELL_KB_WHISPER_COMPUTE_TYPE", "float16")
-    model_loader = model_loader or _load_whisper_model
-    cache_key = ("whisper", model_size, device, compute_type, id(model_loader))
-    model = _MODEL_CACHE.get(cache_key) if reuse_model else None
-    if model is None:
+    readiness = ensure_whisper_available(
+        model_size, device, compute_type,
+        model_loader=model_loader, reuse_model=reuse_model,
+    )
+    model = readiness["model"]
+    if readiness["started"]:
         print(f"[Whisper] Loading model {model_size} (device={device}, compute_type={compute_type})...")
-        model = model_loader(model_size, device, compute_type)
-        if reuse_model:
-            _MODEL_CACHE[cache_key] = model
     else:
         print(f"[Whisper] Reusing model {model_size} (device={device}, compute_type={compute_type})...")
 
@@ -145,6 +189,8 @@ def _ollama_transport(payload, ollama_url, timeout):
 
 def ocr_image(image_path, engine="glm-ocr", prompt=None, ollama_url=OLLAMA_URL, transport=None):
     """OCR one image via an injectable Ollama transport. Returns extracted text."""
+    if transport is None:
+        ensure_ollama_available(ollama_url, model=engine)
     with open(image_path, "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode()
 

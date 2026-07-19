@@ -4,13 +4,14 @@
 **Created:** 2026-07-09
 **Location:** `~/hermes_related/Cornell_KB/`
 
-## Current Status — 2026-07-18
+## Current Status — 2026-07-19
 
 - **Production OpenViking:** last verified healthy on mini-PC port `1934`, using the production `bge-small-en-v1.5-f16` embedding index and DeepSeek V4 Flash VLM. Production configuration and workspace remain unchanged.
 - **Cornell ingestion safety:** implemented and tested. Audio and raw book binaries are rejected/excluded; the production namespace uses a verified curated allowlist of 17 resources.
-- **Retrieval foundation:** reranking (Step 6.4) and BM25 + dense RRF hybrid retrieval (Step 6.5) are complete. The lexical index has been rebuilt with derived course/lecture/source metadata while preserving OpenViking URI alignment.
-- **Embedding experiments:** EmbeddingGemma A/B completed but was not promoted because the remote tunnel/prefix-proxy path still needs interactive-latency optimization and a held-out benchmark. BGE-large remains paused; BGE-small remains production.
-- **Current step:** Step 6.6 — LLM-enhanced query planning and backend routing. Planner contracts, two-attempt current-model planning, validated fallback, execution routing, and trace output are implemented in `scripts/query_models.py`, `scripts/query_planner.py`, and `scripts/query_orchestrator.py`. Each planned request now produces exactly two enhanced queries: a compact `lexical` keyword/term variant for BM25 and a natural-language `semantic` variant for dense retrieval; the orchestrator applies the calibrated source cutoff globally after merging both query paths. The installed `cornell-kb` skill invokes planning inside the active Hermes turn via `validate_model_response()`; no separate model client or delegation is used. A live `whats gain margin` query completed with planned status, no fallback, two relevant frequency-response sources, and no unrelated sources in the final set after calibrated cutoff/abstract improvements. OpenViking recovery is covered by the existing 5-minute service watchdog.
+- **Retrieval foundation:** reranking (Step 6.4), BM25 + dense RRF hybrid retrieval (Step 6.5), and the Step 6.6 planner/orchestrator are implemented. The lexical index preserves OpenViking URI alignment and source metadata.
+- **Realistic reranker checkpoint:** live planner-format replay of 10 Cornell queries now runs semantic text through dense retrieval and lexical text through BM25 in one shared RRF pipeline, reads final sources, repairs stale readable URIs, and records missing-source failures. Hybrid without reranking achieved 70% read hit@5 and 70% top-1 support; hybrid with the context/metadata reranker achieved 60% and 60%; zero final source-read errors. Full offline suite: 89 tests passed.
+- **Current checkpoint:** implemented source-tree URI repair, query-focused source context, dense/lexical evidence preservation, document-family metadata, bounded family tie-breaking, and role-aware planner execution. BGE-small remains production; reranking remains experimental and is not promoted globally.
+- **Next plan:** build a larger source-read benchmark, add formula-heavy and multi-source gold questions, calibrate a blended RRF + reranker score instead of replacing RRF ordering, fill verified corpus gaps such as Kp/Routh coverage, then re-test before any promotion. Persistent reranker-server latency and explicit metadata/filter propagation remain secondary gates. OpenViking recovery remains covered by the existing 5-minute service watchdog.
 
 ## Overview
 
@@ -67,7 +68,7 @@ cleaned-up temporary-directory behavior, so concurrent/repeated runs do not shar
 6. **Primary English Embedding Upgrade** — EmbeddingGemma A/B experiment complete but not promoted; BGE-small remains the production baseline while remote latency and held-out evaluation remain open.
 7. **Reranking Layer** — ✅ Complete: cross-encoder reranking with persistent `bge-reranker-base` server and dense fallback.
 8. **Lexical/Hybrid Retrieval** — ✅ Complete: BM25 lexical retrieval plus dense RRF fusion, canonical URI deduplication, and rebuilt metadata-aware lexical index.
-9. **LLM Query Layer** — **Current step:** implement validated LLM query planning, intent routing, multi-query decomposition, explicit filter propagation, deterministic fallback, and query tracing. Detailed plan: `.hermes/plans/2026-07-18_053433-step-6-6-llm-enhanced-query.md`.
+9. **LLM Query Layer** — ✅ Complete: validated planner contracts, deterministic fallback, lexical/semantic role routing, one shared hybrid execution, provenance, readable-source filtering, query-focused reranker context, and source-read verification. Detailed plan/checkpoint: `.hermes/plans/2026-07-18_053433-step-6-6-llm-enhanced-query.md`.
 10. **Textbook Processor** — Extracts key concepts, definitions, theorems from textbook chapters → indexes source content in OpenViking and retains relevant learning memories in Hindsight
 11. **Homework/Exam Processor** — Extracts problem statements, solution patterns, common mistakes → indexes source content in OpenViking and retains review memories in Hindsight
 

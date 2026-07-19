@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -36,6 +37,114 @@ DEFAULT_OPENVIKING_URL = "http://127.0.0.1:1934"
 DEFAULT_SEARCH_LIMIT = 20
 DEFAULT_RERANK_TOP = 5
 DEFAULT_RERANKER_SERVER = ""  # empty = in-process; set to "host:port" for server mode
+DEFAULT_CONTEXT_CHARS = 2400
+
+_DOMAIN_TERMS = {
+    "control": {"control", "closed", "loop", "feedback", "nyquist", "bode", "stability", "stable", "transfer", "gain", "phase", "frequency", "routh", "hurwitz", "kp", "pole", "zero"},
+    "lean": {"lean", "kanban", "jidoka", "takt", "inventory", "throughput", "pull", "wip", "manufacturing", "little"},
+    "cornell": {"cornell", "hindsight", "obsidian", "lecture", "transcript", "knowledge", "pipeline", "study", "note"},
+}
+
+_FAMILY_BY_DOMAIN = {
+    "control": {"control", "technical_reference", "lecture", "homework", "exam"},
+    "lean": {"reference", "lecture", "homework", "exam"},
+    "cornell": {"project_or_metadata", "lecture", "reference"},
+}
+
+
+def infer_query_domain(query: str) -> str:
+    """Infer a coarse query domain for context labeling, never as a hard filter."""
+    tokens = set(re.findall(r"[a-z0-9_]+", query.lower()))
+    scores = {domain: len(tokens & terms) for domain, terms in _DOMAIN_TERMS.items()}
+    domain, score = max(scores.items(), key=lambda item: item[1])
+    return domain if score >= 2 else "general"
+
+
+def infer_document_metadata(candidate: dict[str, Any], source_text: str = "") -> dict[str, str]:
+    """Derive stable, explainable source signals from URI and source text."""
+    uri = str(candidate.get("uri", ""))
+    identity = f"{uri} {candidate.get('abstract', '')}".lower()
+    context_head = str(source_text)[:1200].lower()
+    combined = f"{identity} {context_head}"
+    # Prefer source identity and abstract names over incidental words in a long body.
+    if any(term in identity for term in ("freq_response", "nyquist", "bode", "control")):
+        family = "technical_reference"
+    elif any(term in identity for term in ("homework", "hw1", "hw2", "hw3", "assignment")):
+        family = "homework"
+    elif any(term in identity for term in ("midterm", "final", "exam", "sample-final")):
+        family = "exam"
+    elif any(term in identity for term in ("lecture", "transcript", "source_verification")):
+        family = "lecture"
+    elif any(term in identity for term in ("skill", "lean-", "book_overview", "methodology")):
+        family = "reference"
+    elif any(term in identity for term in ("readme", "plan", "config", "catalog", "modelfile", ".sh")):
+        family = "project_or_metadata"
+    elif any(term in combined for term in ("diagram", "frequency response")):
+        family = "technical_reference"
+    else:
+        family = "unknown"
+    course_match = re.search(r"\b([A-Z]{2,8}\s?\d{4}[A-Z]?)\b", combined, re.IGNORECASE)
+    suffix = uri.rsplit("/", 1)[-1].lower()
+    source_type = suffix.rsplit(".", 1)[-1] if "." in suffix else "resource"
+    return {
+        "document_family": family,
+        "course": course_match.group(1).upper().replace(" ", " ") if course_match else "unknown",
+        "source_type": source_type,
+    }
+
+
+def document_family_priority(query: str, metadata: dict[str, str]) -> int:
+    """Return a bounded domain-family signal for reranking tie resolution."""
+    domain = infer_query_domain(query)
+    family = metadata.get("document_family", "unknown")
+    if domain == "general":
+        return 0
+    return 1 if family in _FAMILY_BY_DOMAIN.get(domain, set()) else (-1 if family != "unknown" else 0)
+
+
+def build_query_focused_context(
+    query: str,
+    candidate: dict[str, Any],
+    source_text: str = "",
+    *,
+    max_chars: int = DEFAULT_CONTEXT_CHARS,
+) -> str:
+    """Build reranker context from query-relevant source passages, not a head slice."""
+    source_text = str(source_text or "")
+    candidate_excerpt = str(candidate.get("abstract", "") or "")
+    if source_text and candidate_excerpt and candidate_excerpt not in source_text:
+        text = f"{candidate_excerpt}\n{source_text}"
+    else:
+        text = source_text or candidate_excerpt or candidate.get("uri", "")
+    text = str(text)
+    metadata = infer_document_metadata(candidate, text)
+    candidate["source_metadata"] = metadata
+    query_domain = infer_query_domain(query)
+    query_tokens = set(re.findall(r"[a-z0-9_]+", query.lower()))
+    segments = [segment.strip() for segment in re.split(r"\n+|(?<=[.!?])\s+", text) if segment.strip()]
+    scored = []
+    for index, segment in enumerate(segments):
+        segment_tokens = set(re.findall(r"[a-z0-9_]+", segment.lower()))
+        overlap = len(query_tokens & segment_tokens)
+        phrase_bonus = sum(2 for token in query_tokens if len(token) > 4 and token in segment.lower())
+        scored.append((overlap + phrase_bonus, -index, segment))
+    selected: list[str] = []
+    used = 0
+    for _score, _position, segment in sorted(scored, reverse=True):
+        if used + len(segment) + 1 > max_chars - 180:
+            continue
+        selected.append(segment)
+        used += len(segment) + 1
+        if used >= max_chars - 180:
+            break
+    if not selected:
+        selected = [text[: max_chars - 180]]
+    prefix = (
+        f"[query_domain={query_domain} document_family={metadata['document_family']} "
+        f"course={metadata['course']} source_type={metadata['source_type']}]\n"
+    )
+    context = prefix + "\n".join(selected)
+    return context[:max_chars]
 
 # Module-level cache so the model loads once per process.
 _reranker_model: Any = None
@@ -132,12 +241,31 @@ def rerank_candidates(
     try:
         model = _get_reranker(model_name)
         # Build (query, document) pairs for the cross-encoder.
-        pairs = [(query, c.get("abstract", "") or c.get("uri", "")) for c in candidates]
+        pairs = [
+            (query, c.get("rerank_context") or c.get("abstract", "") or c.get("uri", ""))
+            for c in candidates
+        ]
         scores = model.predict(pairs)
 
-        # Attach rerank scores and sort.
-        for candidate, score in zip(candidates, scores):
-            candidate["rerank_score"] = float(score)
+        # Attach raw scores and a bounded source-family adjustment. The family
+        # signal only participates when candidates are close; it never overrides
+        # a clearly stronger cross-encoder score.
+        raw_scores = [float(score) for score in scores]
+        max_raw = max(raw_scores, default=0.0)
+        for candidate, score in zip(candidates, raw_scores):
+            metadata = candidate.get("source_metadata") or infer_document_metadata(
+                candidate, candidate.get("rerank_context", "")
+            )
+            candidate["source_metadata"] = metadata
+            candidate["rerank_score_raw"] = score
+            candidate["family_priority"] = document_family_priority(query, metadata)
+            adjusted = score
+            if max_raw - score <= 0.05:
+                if candidate["family_priority"] > 0:
+                    adjusted += 0.05
+                elif candidate["family_priority"] < 0:
+                    adjusted -= 0.02
+            candidate["rerank_score"] = adjusted
         candidates.sort(key=lambda c: c["rerank_score"], reverse=True)
         return candidates[:top_k]
 
@@ -170,13 +298,29 @@ def search_with_rerank(
             "score": round(hit.get("score", 0.0), 4),
             "level": hit.get("level", 0),
             "abstract": (hit.get("abstract") or "")[:500],
+            "metadata": hit.get("metadata") or {},
         })
+
+    source_read_failures = []
+    readable_candidates = []
+    for candidate in candidates:
+        try:
+            raw_source = backend.read(candidate["uri"], limit=50000)
+            source_text = raw_source if isinstance(raw_source, str) else json.dumps(raw_source, ensure_ascii=False)
+            candidate["source_readable"] = True
+            candidate["source_text_chars"] = len(source_text)
+            candidate["rerank_context"] = build_query_focused_context(query, candidate, source_text)
+            readable_candidates.append(candidate)
+        except Exception as error:
+            source_read_failures.append({"uri": candidate["uri"], "error": repr(error)})
 
     result = {
         "query": query,
         "namespace": CORNELL_NAMESPACE,
         "total_candidates": len(candidates),
-        "results": candidates[:rerank_top] if not use_reranker else [],
+        "readable_candidates": len(readable_candidates),
+        "source_read_failures": source_read_failures,
+        "results": readable_candidates[:rerank_top] if not use_reranker else [],
     }
 
     if not use_reranker:
@@ -186,7 +330,7 @@ def search_with_rerank(
     # Rerank
     start = time.monotonic()
     reranked = rerank_candidates(
-        query, candidates, model_name=model_name, top_k=rerank_top,
+        query, readable_candidates, model_name=model_name, top_k=rerank_top,
         server_url=server_url,
     )
     elapsed_ms = round((time.monotonic() - start) * 1000, 1)

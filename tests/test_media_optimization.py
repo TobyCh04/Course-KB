@@ -18,6 +18,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 import diagrams  # noqa: E402
 import transcribe  # noqa: E402
+import model_availability  # noqa: E402
 
 
 # A valid transparent 1x1 PNG; tests never need Pillow, GPU models, or Ollama.
@@ -97,6 +98,64 @@ class DiagramVisionOptimizationTests(unittest.TestCase):
 
 
 class TranscriptionOptimizationTests(unittest.TestCase):
+    def test_ollama_preflight_starts_only_after_an_unavailable_probe(self):
+        probes = []
+        starts = []
+
+        def probe(url, model, timeout):
+            probes.append((url, model, timeout))
+            return len(probes) > 1
+
+        def starter(**kwargs):
+            starts.append(kwargs)
+
+        result = model_availability.ensure_ollama_available(
+            "http://laptop:11434/api/generate",
+            model="glm-ocr",
+            probe=probe,
+            starter=starter,
+            poll_interval=0,
+            startup_timeout=1,
+        )
+
+        self.assertTrue(result["available"])
+        self.assertTrue(result["started"])
+        self.assertEqual(2, len(probes))
+        self.assertEqual(1, len(starts))
+
+    def test_ollama_preflight_does_not_start_an_available_model(self):
+        starts = []
+
+        result = model_availability.ensure_ollama_available(
+            "http://laptop:11434/api/generate",
+            model="glm-ocr",
+            probe=lambda *_args, **_kwargs: True,
+            starter=lambda **kwargs: starts.append(kwargs),
+        )
+
+        self.assertTrue(result["available"])
+        self.assertFalse(result["started"])
+        self.assertEqual([], starts)
+
+    def test_whisper_preflight_loads_and_reuses_the_runtime(self):
+        loads = []
+
+        def loader(model_size, device, compute_type):
+            loads.append((model_size, device, compute_type))
+            return object()
+
+        transcribe.clear_model_cache()
+        first = transcribe.ensure_whisper_available(
+            "large-v3-turbo", "cuda", "float16", model_loader=loader
+        )
+        second = transcribe.ensure_whisper_available(
+            "large-v3-turbo", "cuda", "float16", model_loader=loader
+        )
+
+        self.assertTrue(first["available"])
+        self.assertTrue(second["available"])
+        self.assertEqual(1, len(loads))
+
     def test_whisper_reuses_cached_model_with_an_injected_loader(self):
         class Segment:
             start, end, text = 0.0, 1.0, " hello"

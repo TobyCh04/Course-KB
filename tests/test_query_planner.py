@@ -176,12 +176,12 @@ def test_orchestrator_executes_lexical_and_semantic_queries(tmp_path):
     calls = []
 
     def hybrid(query, **kwargs):
-        calls.append(query)
+        calls.append((query, kwargs))
         return {
             "mode": "dense_lexical_reranker",
             "results": [
                 {"uri": f"{CORNELL_NAMESPACE}/{len(calls)}", "rerank_score": 0.9},
-                {"uri": f"{CORNELL_NAMESPACE}/low-{len(calls)}", "rerank_score": 0.01},
+                {"uri": f"{CORNELL_NAMESPACE}/low-{len(calls)}", "rerank_score": 0.8},
             ],
         }
 
@@ -196,8 +196,15 @@ def test_orchestrator_executes_lexical_and_semantic_queries(tmp_path):
     planning = QueryPlanner(lambda prompt: json.dumps(response)).plan("whats gain margin")
     result = execute_planned_query(planning, backend, index_path=tmp_path / "index.json")
 
-    assert calls == ["gain margin control systems", "how to calculate gain margin"]
-    assert [item["query_role"] for item in result["trace"]["execution"]] == ["lexical", "semantic"]
+    assert len(calls) == 1
+    assert calls[0][0] == "whats gain margin"
+    assert calls[0][1]["dense_query"] == "how to calculate gain margin"
+    assert calls[0][1]["lexical_query"] == "gain margin control systems"
+    assert result["trace"]["execution"][0]["query_role"] == "hybrid"
+    assert result["trace"]["execution"][0]["queries"] == [
+        {"text": "gain margin control systems", "role": "lexical"},
+        {"text": "how to calculate gain margin", "role": "semantic"},
+    ]
     assert len(result["results"]) == 2
 
 

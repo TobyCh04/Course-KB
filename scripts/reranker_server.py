@@ -27,6 +27,11 @@ import sys
 import time
 from typing import Any
 
+try:
+    from .reranker import document_family_priority, infer_document_metadata
+except ImportError:  # pragma: no cover
+    from reranker import document_family_priority, infer_document_metadata
+
 # Suppress HF symlink warnings on Windows
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
@@ -58,11 +63,28 @@ def _rerank(query: str, candidates: list[dict], top_k: int) -> list[dict]:
         return candidates
 
     model = _get_model()
-    pairs = [(query, c.get("abstract", "") or c.get("uri", "")) for c in candidates]
+    pairs = [
+        (query, c.get("rerank_context") or c.get("abstract", "") or c.get("uri", ""))
+        for c in candidates
+    ]
     scores = model.predict(pairs)
 
-    for candidate, score in zip(candidates, scores):
-        candidate["rerank_score"] = float(score)
+    raw_scores = [float(score) for score in scores]
+    max_raw = max(raw_scores, default=0.0)
+    for candidate, score in zip(candidates, raw_scores):
+        metadata = candidate.get("source_metadata") or infer_document_metadata(
+            candidate, candidate.get("rerank_context", "")
+        )
+        candidate["source_metadata"] = metadata
+        candidate["rerank_score_raw"] = score
+        candidate["family_priority"] = document_family_priority(query, metadata)
+        adjusted = score
+        if max_raw - score <= 0.05:
+            if candidate["family_priority"] > 0:
+                adjusted += 0.05
+            elif candidate["family_priority"] < 0:
+                adjusted -= 0.02
+        candidate["rerank_score"] = adjusted
     candidates.sort(key=lambda c: c["rerank_score"], reverse=True)
     return candidates[:top_k]
 

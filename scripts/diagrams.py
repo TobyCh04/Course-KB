@@ -17,15 +17,24 @@ import json
 import os
 import sys
 import tempfile
+import urllib.request
 
 try:
     from .common_client import JsonHttpClient
+    from .model_availability import ensure_ollama_available
 except ImportError:  # pragma: no cover - direct script execution
     from common_client import JsonHttpClient
+    from model_availability import ensure_ollama_available
 
-_OLLAMA_CLIENT = JsonHttpClient(timeout=180, retries=2)
+_OLLAMA_CLIENT = JsonHttpClient(
+    opener=urllib.request.build_opener(urllib.request.ProxyHandler({})),
+    timeout=180,
+    retries=2,
+)
 
-OLLAMA_URL = "http://100.104.205.105:11434/api/generate"
+OLLAMA_URL = os.environ.get(
+    "CORNELL_KB_OLLAMA_URL", "http://100.104.205.105:11434/api/generate"
+)
 VISION_MODEL = "qwen3-vl:8b"
 
 DIAGRAM_PROMPTS = {
@@ -86,6 +95,8 @@ def analyze_diagram(image_path, ollama_url=OLLAMA_URL, model=VISION_MODEL, trans
     decoded Ollama response, making this path deterministic and network-free in
     tests.
     """
+    if transport is None:
+        ensure_ollama_available(ollama_url, model=model)
     transport = transport or _ollama_transport
     prompt = (
         "Analyze this technical image once. Reply with ONLY JSON in this exact "

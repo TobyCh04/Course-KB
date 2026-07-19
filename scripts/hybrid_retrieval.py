@@ -66,6 +66,8 @@ def _normalize_dense_result(hit: dict[str, Any]) -> dict[str, Any]:
         "score": round(hit.get("score", 0.0), 4),
         "level": hit.get("level", 0),
         "abstract": (hit.get("abstract") or "")[:500],
+        "overview": (hit.get("overview") or "")[:1200],
+        "metadata": hit.get("metadata") or {},
         "source": "dense",
     }
 
@@ -78,6 +80,7 @@ def _normalize_lexical_result(hit: dict[str, Any]) -> dict[str, Any]:
         "score": round(hit.get("score", 0.0), 4),
         "level": 0,
         "abstract": hit.get("abstract", "")[:500],
+        "metadata": hit.get("metadata") or {},
         "source": "lexical",
     }
 
@@ -128,12 +131,14 @@ def reciprocal_rank_fusion(
     # Build a lookup for the best abstract per canonical URI.
     abstracts: dict[str, str] = {}
     levels: dict[str, int] = {}
+    metadata: dict[str, dict[str, Any]] = {}
     for item in dense_results:
         can = item.get("canonical_uri") or item.get("uri", "")
         abstract = item.get("abstract", "") or ""
         if can and len(abstract) > len(abstracts.get(can, "")):
             abstracts[can] = abstract
             levels[can] = item.get("level", 0)
+            metadata[can] = item.get("metadata", {}) or {}
     for item in lexical_results:
         can = item.get("canonical_uri") or item.get("uri", "")
         abstract = item.get("abstract", "") or ""
@@ -144,6 +149,7 @@ def reciprocal_rank_fusion(
             # wins equal-length ties because it is source-text based.
             abstracts[can] = abstract
             levels[can] = item.get("level", 0)
+            metadata[can] = item.get("metadata", {}) or {}
 
     merged = []
     for can, fused_score in scores.items():
@@ -152,12 +158,53 @@ def reciprocal_rank_fusion(
             "canonical_uri": can,
             "fused_score": round(fused_score, 4),
             "abstract": abstracts.get(can, ""),
+            "metadata": metadata.get(can, {}),
             "level": levels.get(can, 0),
             "provenance": provenance.get(can, []),
         })
 
     merged.sort(key=lambda x: x["fused_score"], reverse=True)
     return merged
+
+
+def _read_source_text(backend: CornellOpenVikingBackend, uri: str) -> str:
+    raw = backend.read(uri, limit=50000)
+    if isinstance(raw, str):
+        return raw
+    return json.dumps(raw, ensure_ascii=False)
+
+
+def _prepare_readable_candidates(
+    backend: CornellOpenVikingBackend,
+    query: str,
+    candidates: list[dict[str, Any]],
+    *,
+    limit: int,
+    context_chars: int = reranker_mod.DEFAULT_CONTEXT_CHARS,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """Read candidate sources, attach focused context, and drop unreadable URIs."""
+    readable: list[dict[str, Any]] = []
+    failures: list[dict[str, str]] = []
+    for original in candidates[:limit]:
+        candidate = dict(original)
+        uri = str(candidate.get("uri", ""))
+        try:
+            source_text = _read_source_text(backend, uri)
+            candidate["source_readable"] = True
+            candidate["source_text_chars"] = len(source_text)
+            candidate["rerank_context"] = reranker_mod.build_query_focused_context(
+                query, candidate, source_text, max_chars=context_chars
+            )
+            readable.append(candidate)
+        except Exception as error:
+            failures.append({"uri": uri, "error": repr(error)})
+    return readable, failures
+
+
+def _combined_rerank_query(dense_query: str, lexical_query: str) -> str:
+    if dense_query.strip().casefold() == lexical_query.strip().casefold():
+        return dense_query
+    return f"{dense_query}\nExact retrieval terms: {lexical_query}"
 
 
 def lexical_search(
@@ -288,39 +335,19 @@ def hybrid_search(
     rerank_server_url: str = "",
     max_sources: int = DEFAULT_MAX_SOURCES,
     rerank_score_drop: float | None = None,
+    dense_query: str | None = None,
+    lexical_query: str | None = None,
+    context_chars: int = reranker_mod.DEFAULT_CONTEXT_CHARS,
 ) -> dict[str, Any]:
-    """Search OpenViking + BM25, fuse with RRF, then rerank by default.
+    """Search, fuse, read, and rerank with production-safe source context."""
+    dense_query = dense_query or query
+    lexical_query = lexical_query or query
+    rerank_query = _combined_rerank_query(dense_query, lexical_query)
 
-    Set ``rerank_top=0`` only for an explicit diagnostic bypass.
-
-    Args:
-        backend: OpenViking backend (dense retrieval).
-        query: User query.
-        index_path: Path to the BM25 lexical index JSON.
-        search_limit: Number of dense candidates to retrieve (pre-dedup).
-        lexical_limit: Number of lexical candidates to retrieve.
-        top_k: Default number of final source documents; dynamic selection may
-            expand this up to ``max_sources``.
-        k: RRF smoothing constant.
-        dense_weight: Weight for dense ranks in RRF.
-        lexical_weight: Weight for lexical ranks in RRF.
-        rerank_top: Number of fused candidates to rerank. The default reranks
-            the full candidate pool; set to 0 only for diagnostics.
-        rerank_server_url: Optional persistent reranker server (host:port).
-        max_sources: Hard maximum for final source documents.
-
-    Returns:
-        Result dict with query, mode, candidate counts, and results.
-    """
-    # Dense retrieval
-    dense_raw = backend.search(query, limit=search_limit)
-    _dense_all = [_normalize_dense_result(h) for h in dense_raw.get("resources", [])]
-    # Deduplicate: keep only the best-scoring chunk per source document so
-    # that multi-chunk documents don't inflate RRF scores.
-    dense_results = _dedupe_by_canonical_uri(_dense_all)
-
-    # Lexical retrieval
-    lexical_results = lexical_search(query, index_path, limit=lexical_limit)
+    dense_raw = backend.search(dense_query, limit=search_limit)
+    dense_all = [_normalize_dense_result(h) for h in dense_raw.get("resources", [])]
+    dense_results = _dedupe_by_canonical_uri(dense_all)
+    lexical_results = lexical_search(lexical_query, index_path, limit=lexical_limit)
 
     start = time.monotonic()
     fused = reciprocal_rank_fusion(
@@ -331,26 +358,38 @@ def hybrid_search(
         lexical_weight=lexical_weight,
     )
     fusion_ms = round((time.monotonic() - start) * 1000, 2)
-
     result = {
         "query": query,
+        "dense_query": dense_query,
+        "lexical_query": lexical_query,
+        "rerank_query": rerank_query,
         "namespace": CORNELL_NAMESPACE,
         "mode": "dense_plus_lexical",
         "dense_candidates": len(dense_results),
         "lexical_candidates": len(lexical_results),
         "fusion_latency_ms": fusion_ms,
-        "results": fused[:top_k],
+        "results": [],
+        "source_read_failures": [],
     }
 
     if rerank_top > 0 and fused:
+        context_start = time.monotonic()
+        rerank_candidates, failures = _prepare_readable_candidates(
+            backend,
+            rerank_query,
+            fused,
+            limit=min(rerank_top, len(fused)),
+            context_chars=context_chars,
+        )
+        result["source_read_failures"].extend(failures)
+        result["context_latency_ms"] = round((time.monotonic() - context_start) * 1000, 2)
         rerank_start = time.monotonic()
-        rerank_candidates = fused[:min(rerank_top, len(fused))]
         reranked = reranker_mod.rerank_candidates(
-            query,
+            rerank_query,
             rerank_candidates,
             top_k=len(rerank_candidates),
             server_url=rerank_server_url,
-        )
+        ) if rerank_candidates else []
         rerank_ms = round((time.monotonic() - rerank_start) * 1000, 2)
         has_rerank_scores = any("rerank_score" in c for c in reranked)
         result["mode"] = "dense_lexical_reranker" if has_rerank_scores else "dense_lexical_fallback"
@@ -366,16 +405,23 @@ def hybrid_search(
         result["results"] = selected
         result["source_cutoff"] = cutoff
     else:
+        readable, failures = _prepare_readable_candidates(
+            backend,
+            rerank_query,
+            fused,
+            limit=min(len(fused), max_sources + top_k + 5),
+            context_chars=context_chars,
+        )
+        result["source_read_failures"].extend(failures)
         result["mode"] = "dense_plus_lexical"
         selected, cutoff = select_final_sources(
-            fused,
+            readable,
             default_limit=top_k,
             max_sources=max_sources,
             reranked=False,
         )
         result["results"] = selected
         result["source_cutoff"] = cutoff
-
     return result
 
 

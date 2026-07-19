@@ -6,7 +6,7 @@
 
 **Architecture:** The planner sits above the existing OpenViking dense search, BM25/RRF hybrid retrieval, reranker, and Hindsight clients. It converts one user query into a validated `QueryPlan`; the executor runs that plan; a `QueryTrace` records what was planned and what actually happened. The LLM may propose intent, rewrites, filters, and backend selection, but validation—not the LLM—controls namespaces, filters, limits, and fallback behavior.
 
-**Current state:** Step 6.4 reranking and Step 6.5 hybrid retrieval are complete. Step 6.6 has not been implemented. Preflight hardening is being recorded separately: strict Cornell namespace validation and lexical-index metadata derivation are in progress. Production OpenViking remains unchanged on the existing BGE-small baseline.
+**Current state:** Step 6.4 reranking, Step 6.5 hybrid retrieval, and the Step 6.6 core implementation are complete and verified. Non-fallback plans now require exactly one compact `lexical` query and one natural-language `semantic` query; both execute through hybrid retrieval, merge with provenance, and receive one global calibrated cutoff. Production OpenViking remains unchanged on the existing BGE-small baseline.
 
 ---
 
@@ -255,7 +255,36 @@ Project verification command:
 
 ---
 
-## 8. Acceptance criteria
+## 8. Current checkpoint and next plan
+
+### Completed and verified
+
+- Planner prompt requires exactly two enhanced query versions: `lexical` and `semantic`.
+- Local validation rejects missing, duplicate, or incorrectly role-labeled query variants.
+- The orchestrator routes semantic text to dense retrieval and lexical text to BM25 in one shared hybrid call, preserves provenance, repairs stale readable URIs, and applies the final source-read cutoff.
+- Reranker input combines canonical source reads with dense/lexical excerpts, query-focused passage selection, source metadata, and bounded document-family signals.
+- Realistic planner-format replay: 10 Cornell queries; hybrid-only achieved 70% read hit@5 and 70% top-1 support; the new reranker achieved 60% and 60%; zero final read errors.
+- Offline verification: 89 tests passing; production OpenViking configuration/workspace unchanged.
+
+### Next implementation sequence
+
+1. Build a larger 20–30 query source-read benchmark with formula-heavy, ambiguous, multi-source, and multi-hop questions; add verified gold URIs and answer-support terms.
+2. Compare no reranker, query-focused reranker, and calibrated RRF + reranker blends such as 90/10, 80/20, 70/30, and 50/50 using source-read hit@5, top-1 support, MRR, and source-family diversity.
+3. Fill or explicitly label corpus gaps such as Kp/Routh coverage; do not fabricate missing sources.
+4. Route planner variants through the persistent reranker server for stable warm latency after quality calibration.
+5. Add explicit course/lecture/source-type/semester filter propagation and verify lexical/OpenViking consistency.
+6. Begin the textbook processor only after the blended retrieval gate passes, preserving chapter/page provenance and structured definitions, formulas, theorems, and examples.
+
+### Open decisions/gates
+
+- Keep hybrid RRF without reranking as the rollback-safe production default until the blended score beats it on source-read quality.
+- Do not promote EmbeddingGemma until the remote interactive-latency path and identical-corpus held-out quality benchmark are complete.
+- Do not begin broad textbook ingestion until the source-read retrieval benchmark and metadata/filter path are stable.
+- Keep production port `1934`, workspace `data_bge_en`, and BGE-small as the rollback baseline.
+
+---
+
+## 9. Acceptance criteria
 
 Step 6.6 is complete only when:
 

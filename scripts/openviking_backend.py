@@ -46,6 +46,8 @@ class OpenVikingClient(Protocol):
 
     def read(self, uri: str, **kwargs: Any) -> Any: ...
 
+    def ls(self, uri: str, **kwargs: Any) -> Any: ...
+
 
 class AudioSourceRejected(ValueError):
     """Raised when an audio file is about to be sent to OpenViking."""
@@ -128,6 +130,8 @@ class CornellOpenVikingBackend:
         self.root = Path(root).expanduser().resolve() if root else None
         self.timeout = timeout
         self._client = client
+        self._uri_repair_cache: dict[str, str | None] = {}
+        self._resource_files_cache: list[dict[str, Any]] | None = None
 
     @property
     def client(self) -> OpenVikingClient:
@@ -205,6 +209,51 @@ class CornellOpenVikingBackend:
             )
         return resources
 
+    def _resource_files(self) -> list[dict[str, Any]]:
+        """Cache readable file nodes from the live Cornell tree for URI repair."""
+        if self._resource_files_cache is not None:
+            return self._resource_files_cache
+        files: list[dict[str, Any]] = []
+        try:
+            roots = self.client.ls(CORNELL_NAMESPACE, recursive=True, node_limit=2000)
+            for root in roots or []:
+                if not root.get("isDir") or not root.get("uri"):
+                    continue
+                children = self.client.ls(root["uri"], recursive=True, node_limit=2000)
+                for item in children or []:
+                    if not item.get("isDir") and item.get("uri"):
+                        files.append(item)
+        except Exception:
+            files = []
+        # De-duplicate tree entries returned by different SDK traversal modes.
+        unique: dict[str, dict[str, Any]] = {item["uri"]: item for item in files}
+        self._resource_files_cache = list(unique.values())
+        return self._resource_files_cache
+
+    def resolve_uri(self, uri: str) -> str | None:
+        """Resolve stale filename-only search URIs to a canonical readable child URI."""
+        _check_namespace(uri)
+        if uri in self._uri_repair_cache:
+            return self._uri_repair_cache[uri]
+        requested_name = uri.rsplit("/", 1)[-1].casefold()
+        requested_stem = requested_name.rsplit(".", 1)[0]
+        files = self._resource_files()
+        exact = [
+            item["uri"] for item in files
+            if str(item.get("name", "")).casefold() == requested_name
+        ]
+        stem_matches = [
+            item["uri"] for item in files
+            if str(item.get("name", "")).casefold().rsplit(".", 1)[0] == requested_stem
+        ]
+        prefix_matches = [
+            item["uri"] for item in files
+            if str(item.get("name", "")).casefold().rsplit(".", 1)[0].startswith(requested_stem)
+        ]
+        repaired = next(iter(exact or stem_matches or prefix_matches), None)
+        self._uri_repair_cache[uri] = repaired
+        return repaired
+
     def search(self, query: str, *, target_uri: str = "", limit: int = 8) -> Any:
         _check_namespace(target_uri or CORNELL_NAMESPACE)
         return self.client.search(
@@ -215,7 +264,13 @@ class CornellOpenVikingBackend:
 
     def read(self, uri: str, *, limit: int = 20000) -> Any:
         _check_namespace(uri)
-        return self.client.read(uri, offset=0, limit=max(1, min(int(limit), 50000)))
+        try:
+            return self.client.read(uri, offset=0, limit=max(1, min(int(limit), 50000)))
+        except Exception:
+            repaired = self.resolve_uri(uri)
+            if repaired and repaired != uri:
+                return self.client.read(repaired, offset=0, limit=max(1, min(int(limit), 50000)))
+            raise
 
     def hybrid_search(
         self,

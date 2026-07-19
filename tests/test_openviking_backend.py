@@ -136,6 +136,32 @@ def test_search_and_read_are_limited_to_cornell_namespace():
         backend.read("viking://resources/other")
 
 
+def test_read_repairs_stale_filename_to_canonical_tree_uri():
+    canonical = f"{CORNELL_NAMESPACE}/uncategorized/cornell-source/course_catalog-abc/course_catalog.md"
+    stale = f"{CORNELL_NAMESPACE}/course_catalog.yaml"
+
+    class RepairClient(FakeOpenVikingClient):
+        def read(self, uri, **kwargs):
+            self.read_calls.append((uri, kwargs))
+            if uri == stale:
+                raise FileNotFoundError(uri)
+            return "canonical source"
+
+        def ls(self, uri, **kwargs):
+            if uri == CORNELL_NAMESPACE:
+                return [{"isDir": True, "uri": f"{CORNELL_NAMESPACE}/uncategorized/cornell-source/course_catalog-abc"}]
+            return [{"isDir": False, "name": "course_catalog.md", "uri": canonical}]
+
+    backend = CornellOpenVikingBackend(RepairClient())
+    assert backend.read(stale) == "canonical source"
+    assert backend.resolve_uri(stale) == canonical
+
+
+def test_unrepairable_uri_remains_missing():
+    backend = CornellOpenVikingBackend(FakeOpenVikingClient())
+    assert backend.resolve_uri(f"{CORNELL_NAMESPACE}/README.md") is None
+
+
 def test_namespace_prefix_collision_is_rejected():
     client = FakeOpenVikingClient()
     backend = CornellOpenVikingBackend(client)

@@ -21,22 +21,71 @@ def execute_planned_query(
     hindsight_recall: HindsightRecall | None = None,
     max_sources: int = 8,
 ) -> dict[str, Any]:
-    """Execute plan and return results plus visible planner/execution trace.
-
-    Backend calls are limited to validated plan backends. OpenViking remains
-    namespace-locked by its adapter; Hindsight is injected for offline tests
-    and deployment-specific integration.
-    """
+    """Execute validated plan with one role-aware hybrid call per OpenViking plan."""
     plan, trace = planning.plan, planning.trace
     if max_sources < 1:
         raise ValueError("max_sources must be positive")
     merged: dict[str, dict[str, Any]] = {}
 
+    def merge_result(result: dict[str, Any], provenance: list[str]) -> None:
+        for candidate in result.get("results", []):
+            uri = candidate.get("canonical_uri") or candidate.get("uri", "")
+            if not uri or not uri.startswith(CORNELL_NAMESPACE):
+                continue
+            candidate = dict(candidate)
+            candidate.setdefault("query_provenance", []).extend(provenance)
+            existing = merged.get(uri)
+            if existing is None or _candidate_score(candidate) > _candidate_score(existing):
+                merged[uri] = candidate
+
+    openviking_queries = [
+        query for query in plan.queries
+        if "openviking" in ((query.backend,) if query.backend else plan.backends)
+    ]
+    if openviking_queries:
+        started = time.monotonic()
+        record: dict[str, Any] = {
+            "query": plan.original_query,
+            "query_role": "hybrid" if len(openviking_queries) > 1 else openviking_queries[0].role,
+            "queries": [
+                {"text": query.text, "role": query.role}
+                for query in openviking_queries
+            ],
+            "original_query": plan.original_query,
+            "trace_id": plan.trace_id,
+            "backend": "openviking",
+            "status": "started",
+        }
+        try:
+            lexical = next((q for q in openviking_queries if q.role == "lexical"), None)
+            semantic = next((q for q in openviking_queries if q.role == "semantic"), None)
+            result = _execute_openviking(
+                backend,
+                plan.original_query,
+                plan,
+                index_path=index_path,
+                dense_query=semantic.text if semantic else None,
+                lexical_query=lexical.text if lexical else None,
+            )
+            provenance = [query.text for query in openviking_queries]
+            merge_result(result, provenance)
+            record["result_count"] = len(result.get("results", []))
+            record["mode"] = result.get("mode")
+            record["source_read_failures"] = result.get("source_read_failures", [])
+            record["status"] = "completed"
+        except Exception as error:
+            record["status"] = "failed"
+            trace.add_error(f"openviking query failed: {error}")
+        record["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
+        trace.execution.append(record)
+
     for planned_query in plan.queries:
         selected_backends = (planned_query.backend,) if planned_query.backend else plan.backends
         for backend_name in selected_backends:
+            if backend_name == "openviking":
+                continue
             started = time.monotonic()
-            record: dict[str, Any] = {
+            record = {
                 "query": planned_query.text,
                 "query_role": planned_query.role,
                 "original_query": plan.original_query,
@@ -45,26 +94,7 @@ def execute_planned_query(
                 "status": "started",
             }
             try:
-                if backend_name == "openviking":
-                    result = _execute_openviking(
-                        backend,
-                        planned_query.text,
-                        plan,
-                        index_path=index_path,
-                    )
-                    candidates = result.get("results", [])
-                    for candidate in candidates:
-                        uri = candidate.get("canonical_uri") or candidate.get("uri", "")
-                        if not uri or not uri.startswith(CORNELL_NAMESPACE):
-                            continue
-                        candidate = dict(candidate)
-                        candidate.setdefault("query_provenance", []).append(planned_query.text)
-                        existing = merged.get(uri)
-                        if existing is None or _candidate_score(candidate) > _candidate_score(existing):
-                            merged[uri] = candidate
-                    record["result_count"] = len(candidates)
-                    record["mode"] = result.get("mode")
-                elif backend_name == "hindsight":
+                if backend_name == "hindsight":
                     if hindsight_recall is None:
                         raise RuntimeError("Hindsight backend requested but no recall callable configured")
                     memories = hindsight_recall(planned_query.text, plan.limit)
@@ -108,14 +138,20 @@ def _execute_openviking(
     plan: QueryPlan,
     *,
     index_path: str | Path,
+    dense_query: str | None = None,
+    lexical_query: str | None = None,
 ) -> dict[str, Any]:
     if plan.retrieval_mode == "dense":
-        raw = backend.search(query, limit=plan.limit)
+        raw = backend.search(dense_query or query, limit=plan.limit)
         return {"mode": "dense", "results": raw.get("resources", [])}
     return backend.hybrid_search(
         query,
         index_path=index_path,
         top_k=plan.limit,
+        max_sources=8,
+        dense_query=dense_query,
+        lexical_query=lexical_query,
+        rerank_top=0 if plan.retrieval_mode == "hybrid" else 20,
     )
 
 

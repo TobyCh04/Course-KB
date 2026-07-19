@@ -24,6 +24,7 @@ class FakeSearchClient:
     """Fake OpenViking client returning fixed candidates."""
 
     def __init__(self, candidates=None):
+        self.search_calls = []
         self._candidates = candidates if candidates is not None else [
             {"uri": f"{CORNELL_NAMESPACE}/doc/alpha/alpha.md", "score": 0.80, "level": 1,
              "abstract": "Alpha: lean manufacturing overview."},
@@ -37,6 +38,7 @@ class FakeSearchClient:
         return {"status": "completed"}
 
     def search(self, **kwargs):
+        self.search_calls.append(kwargs)
         return {"resources": list(self._candidates), "total": len(self._candidates)}
 
     def read(self, uri, **kwargs):
@@ -155,6 +157,56 @@ def test_dedupe_by_canonical_uri_keeps_highest_scoring_chunk():
     assert len(deduped) == 2
     assert deduped[0]["uri"].endswith("chunk_1.md")  # highest score kept
     assert deduped[1]["uri"].endswith("single.md")
+
+
+def test_hybrid_search_routes_distinct_dense_and_lexical_queries(tmp_path, monkeypatch):
+    backend = CornellOpenVikingBackend(FakeSearchClient())
+    index_path = _write_lexical_index(tmp_path, {})
+    lexical_calls = []
+    rerank_calls = []
+
+    def _fake_lexical_search(query, index_path, *, limit=10):
+        lexical_calls.append(query)
+        return [{"uri": f"{CORNELL_NAMESPACE}/doc/beta/beta.md", "score": 1.0, "abstract": "kanban"}]
+
+    def _fake_rerank(query, candidates, **kwargs):
+        rerank_calls.append((query, candidates))
+        for c in candidates:
+            c["rerank_score"] = 1.0
+        return candidates
+
+    monkeypatch.setattr(hr, "lexical_search", _fake_lexical_search)
+    monkeypatch.setattr(hr.reranker_mod, "rerank_candidates", _fake_rerank)
+    result = hr.hybrid_search(
+        backend, "original question", index_path=index_path,
+        dense_query="semantic explanation", lexical_query="exact kanban formula",
+        search_limit=3, lexical_limit=3, top_k=2, rerank_top=2,
+    )
+
+    assert backend.client.search_calls[0]["query"] == "semantic explanation"
+    assert lexical_calls == ["exact kanban formula"]
+    assert rerank_calls and "Exact retrieval terms: exact kanban formula" in rerank_calls[0][0]
+    assert result["dense_query"] == "semantic explanation"
+    assert result["lexical_query"] == "exact kanban formula"
+
+
+def test_hybrid_search_drops_unreadable_sources_and_records_failures(tmp_path, monkeypatch):
+    class ReadClient(FakeSearchClient):
+        def read(self, uri, **kwargs):
+            if uri.endswith("/beta/beta.md"):
+                raise FileNotFoundError(uri)
+            return "readable source with kanban formula"
+
+    backend = CornellOpenVikingBackend(ReadClient())
+    index_path = _write_lexical_index(tmp_path, {})
+    monkeypatch.setattr(hr, "lexical_search", lambda query, index_path, *, limit=10: [])
+    monkeypatch.setattr(hr.reranker_mod, "rerank_candidates", lambda query, candidates, **kwargs: candidates)
+    result = hr.hybrid_search(
+        backend, "kanban", index_path=index_path,
+        search_limit=3, lexical_limit=3, top_k=2, rerank_top=0,
+    )
+    assert all(not item["uri"].endswith("/beta/beta.md") for item in result["results"])
+    assert any(item["uri"].endswith("/beta/beta.md") for item in result["source_read_failures"])
 
 
 def test_hybrid_search_returns_fused_results(tmp_path, monkeypatch):
