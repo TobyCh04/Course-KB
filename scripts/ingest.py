@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from collections.abc import Mapping
 from typing import Any, Iterable
 
 try:  # Supports both `python scripts/ingest.py` and `import scripts.ingest`.
@@ -85,14 +87,22 @@ def hindsight_recall(
     bank_id: str = DEFAULT_BANK_ID,
     url: str = HINDSIGHT_URL,
     *,
+    filters: Mapping[str, Any] | None = None,
+    tags_match: str = "all_strict",
     timeout: float = 30,
     retries: int = 2,
     client: JsonHttpClient | Any | None = None,
 ) -> Any:
     """Search Hindsight memory and return an error mapping rather than raising."""
     payload: dict[str, Any] = {"query": query, "top_k": top_k}
+    if filters:
+        filter_tags = hindsight_tags_for_filters(filters)
+        if filter_tags:
+            payload["tags"] = filter_tags
+            payload["tags_match"] = tags_match
     if tags:
-        payload["tags"] = tags
+        payload["tags"] = list(dict.fromkeys([*(payload.get("tags", [])), *tags]))
+        payload["tags_match"] = tags_match
     try:
         active_client = client or _make_client(timeout, retries)
         return active_client.post_json(
@@ -121,19 +131,61 @@ def format_fact_context(fact: dict[str, Any]) -> str:
 
 
 def format_fact_tags(fact: dict[str, Any]) -> list[str]:
-    """Build the tags list for a fact."""
+    """Build backward-compatible and namespaced metadata tags for a fact."""
     tags = ["cornell-kb"]
-    if fact.get("course"):
-        tags.append(fact["course"].lower().replace(" ", "-"))
+    course = fact.get("course")
+    source_type = fact.get("source_type")
+    if course:
+        course_tag = _tag_value(course)
+        tags.extend([course_tag, f"course:{course_tag}"])
     if fact.get("topic"):
-        tags.append(fact["topic"].lower().replace(" ", "-"))
+        topic_tag = _tag_value(fact["topic"])
+        tags.extend([topic_tag, f"topic:{topic_tag}"])
     if fact.get("type"):
-        tags.append(fact["type"])
-    if fact.get("source_type"):
-        tags.append(fact["source_type"])
+        fact_type = _tag_value(fact["type"])
+        tags.extend([fact_type, f"fact-type:{fact_type}"])
+    if source_type:
+        source_tag = _tag_value(source_type)
+        tags.extend([source_tag, f"source-type:{source_tag}"])
     if fact.get("engine"):
-        tags.append(fact["engine"])
-    return tags
+        engine_tag = _tag_value(fact["engine"])
+        tags.extend([engine_tag, f"engine:{engine_tag}"])
+    if fact.get("lecture") is not None:
+        tags.append(f"lecture:{fact['lecture']}")
+    if fact.get("semester"):
+        tags.append(f"semester:{_tag_value(fact['semester'])}")
+    if fact.get("date"):
+        tags.append(f"date:{_tag_value(fact['date'])}")
+
+    scope = fact.get("source_scope")
+    if scope not in {"course", "assessment"}:
+        scope = "assessment" if source_type in {"homework", "exam"} else "course"
+    tags.append(f"scope:{scope}")
+    return list(dict.fromkeys(tags))
+
+
+def _tag_value(value: Any) -> str:
+    """Normalize a metadata value into a stable Hindsight tag component."""
+    return re.sub(r"[^a-z0-9]+", "-", str(value).strip().casefold()).strip("-")
+
+
+def hindsight_tags_for_filters(filters: Mapping[str, Any]) -> list[str]:
+    """Translate validated Cornell query filters into Hindsight tag filters."""
+    tags = ["cornell-kb"]
+    if filters.get("course"):
+        tags.append(f"course:{_tag_value(filters['course'])}")
+    if filters.get("lecture") is not None:
+        tags.append(f"lecture:{filters['lecture']}")
+    if filters.get("source_type"):
+        tags.append(f"source-type:{_tag_value(filters['source_type'])}")
+    source_scope = filters.get("source_scope")
+    if source_scope in {"course", "assessment"}:
+        tags.append(f"scope:{source_scope}")
+    if filters.get("semester"):
+        tags.append(f"semester:{_tag_value(filters['semester'])}")
+    if filters.get("date"):
+        tags.append(f"date:{_tag_value(filters['date'])}")
+    return list(dict.fromkeys(tags))
 
 
 def _batched(items: list[tuple[int, dict[str, Any]]], batch_size: int) -> Iterable[list[tuple[int, dict[str, Any]]]]:

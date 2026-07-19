@@ -1168,10 +1168,16 @@ def retain_to_hindsight(note_text, course_code, lecture, topic, url=HINDSIGHT_UR
     summary_match = re.search(r'## Key Concepts\n(.*?)(?=\n## |\Z)', note_text, re.DOTALL)
     summary = summary_match.group(1).strip() if summary_match else note_text[:500]
 
+    course_tag = course_code.lower().replace(" ", "-")
+    topic_tag = topic.lower().replace(" ", "-")
     item = {
         "content": f"Lecture {lecture} ({topic}) notes generated. Key concepts:\n{summary}",
         "context": f"{course_code} Lecture {lecture} — {topic} [lecture-notes]",
-        "tags": ["cornell-kb", course_code.lower().replace(" ", "-"), "lecture-notes", topic.lower().replace(" ", "-")],
+        "tags": [
+            "cornell-kb", course_tag, f"course:{course_tag}", "lecture-notes",
+            "source-type:lecture", f"lecture:{lecture}", f"topic:{topic_tag}",
+            "scope:course", topic_tag,
+        ],
     }
     payload = {"items": [item]}
     try:

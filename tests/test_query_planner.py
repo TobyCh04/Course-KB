@@ -23,8 +23,7 @@ def _response(**overrides):
         "intent": "document_lookup",
         "backends": ["openviking"],
         "queries": [
-            {"text": "closed loop stability keywords", "role": "lexical"},
-            {"text": "explain closed loop stability", "role": "semantic"},
+            {"text": "closed loop stability", "role": "lexical"},
         ],
         "filters": {},
         "retrieval_mode": "hybrid_rerank",
@@ -71,7 +70,7 @@ def test_planner_retries_then_surfaces_warning_and_fallback():
     assert "failed after 2 attempts" in result.trace.warning
     assert result.trace.errors
     assert result.plan.status == "fallback"
-    assert result.plan.queries[0].text == "kanban formula"
+    assert result.plan.queries[0].text == "kanban"
     assert result.plan.retrieval_mode == "hybrid"
 
 
@@ -79,7 +78,7 @@ def test_planner_falls_back_on_malformed_json():
     result = QueryPlanner(lambda prompt: "not json").plan("frequency response")
     assert result.trace.fallback_used is True
     assert result.plan.original_query == "frequency response"
-    assert result.plan.filters.to_dict() == {}
+    assert result.plan.filters.to_dict() == {"source_scope": "course"}
 
 
 def test_planner_accepts_fenced_json_and_explicit_filters():
@@ -87,8 +86,7 @@ def test_planner_accepts_fenced_json_and_explicit_filters():
 
     response = _response(
         queries=[
-            {"text": "SYSEN 6800 kanban keywords", "role": "lexical"},
-            {"text": "kanban pull system in SYSEN 6800", "role": "semantic"},
+            {"text": "SYSEN 6800 kanban", "role": "lexical"},
         ],
         filters={"course": "SYSEN 6800", "lecture": 3},
     )
@@ -96,7 +94,11 @@ def test_planner_accepts_fenced_json_and_explicit_filters():
         "Compare SYSEN 6800 Lecture 3 kanban"
     )
     assert result.trace.status == "planned"
-    assert result.plan.filters.to_dict() == {"course": "SYSEN 6800", "lecture": 3}
+    assert result.plan.filters.to_dict() == {
+        "course": "SYSEN 6800",
+        "lecture": 3,
+        "source_scope": "course",
+    }
 
 
 @pytest.mark.parametrize(
@@ -120,28 +122,55 @@ def test_planner_rejects_unsafe_output_and_falls_back(response):
     assert result.plan.queries[0].text == "SYSEN 6800 Lecture 3 kanban"
 
 
-def test_planner_deduplicates_rewritten_queries():
+def test_planner_normalizes_request_language_to_topic_keywords():
     import json
     response = _response(
         queries=[
-            {"text": "kanban pull system", "role": "lexical"},
-            {"text": "KANBAN PULL SYSTEM", "role": "lexical"},
-            {"text": "explain kanban pull system", "role": "semantic"},
+            {"text": "what's the formula for gain margin", "role": "lexical"},
         ]
     )
-    result = QueryPlanner(lambda prompt: json.dumps(response)).plan("Explain kanban")
-    assert [query.text for query in result.plan.queries] == [
-        "kanban pull system",
-        "explain kanban pull system",
-    ]
-    assert {query.role for query in result.plan.queries} == {"lexical", "semantic"}
+    result = QueryPlanner(lambda prompt: json.dumps(response)).plan(
+        "What's the formula for gain margin?"
+    )
+    assert [query.text for query in result.plan.queries] == ["gain margin"]
+    assert result.plan.queries[0].role == "lexical"
+
+
+def test_planner_rejects_semantic_expansion_beyond_original_keywords():
+    import json
+    response = _response(
+        queries=[
+            {"text": "gain margin control systems", "role": "lexical"},
+        ]
+    )
+    result = QueryPlanner(lambda prompt: json.dumps(response)).plan(
+        "What's the formula for gain margin?"
+    )
+
+    assert result.trace.fallback_used is True
+    assert result.plan.queries[0].text == "gain margin"
+
+
+def test_planner_assigns_source_scope_policy():
+    import json
+    response = _response(queries=[{"text": "gain margin", "role": "lexical"}])
+
+    normal = QueryPlanner(lambda prompt: json.dumps(response)).plan("What's the formula for gain margin?")
+    assessment = QueryPlanner(lambda prompt: json.dumps(response)).plan("Find homework questions about gain margin")
+    study = QueryPlanner(lambda prompt: json.dumps(response)).plan("Create a study guide for gain margin")
+    quiz = QueryPlanner(lambda prompt: json.dumps(response)).plan("Make a quiz on gain margin")
+
+    assert normal.plan.filters.source_scope == "course"
+    assert assessment.plan.filters.source_scope == "assessment"
+    assert study.plan.filters.source_scope == "all"
+    assert quiz.plan.filters.source_scope == "all"
 
 
 def test_validate_model_response_does_not_call_llm():
     planner = QueryPlanner(llm=lambda _prompt: (_ for _ in ()).throw(AssertionError("must not call")))
     result = planner.validate_model_response(
         "What is a kanban pull system?",
-        '{"intent":"document_lookup","backends":["openviking"],"queries":[{"text":"kanban pull system","role":"lexical"},{"text":"what is a kanban pull system","role":"semantic"}],"filters":{},"retrieval_mode":"hybrid_rerank","limit":5}',
+        '{"intent":"document_lookup","backends":["openviking"],"queries":[{"text":"what is a kanban pull system","role":"lexical"}],"filters":{},"retrieval_mode":"hybrid_rerank","limit":5}',
     )
     assert result.trace.status == "planned"
     assert result.plan.planner_model is None
@@ -192,21 +221,19 @@ def test_orchestrator_executes_lexical_and_semantic_queries(tmp_path):
     import json
     response = _response(
         queries=[
-            {"text": "gain margin control systems", "role": "lexical"},
-            {"text": "how to calculate gain margin", "role": "semantic"},
+            {"text": "what's the formula for gain margin", "role": "lexical"},
         ]
     )
     planning = QueryPlanner(lambda prompt: json.dumps(response)).plan("whats gain margin")
     result = execute_planned_query(planning, backend, index_path=tmp_path / "index.json")
 
     assert len(calls) == 1
-    assert calls[0][0] == "whats gain margin"
-    assert calls[0][1]["dense_query"] == "how to calculate gain margin"
-    assert calls[0][1]["lexical_query"] == "gain margin control systems"
-    assert result["trace"]["execution"][0]["query_role"] == "hybrid"
+    assert calls[0][0] == "gain margin"
+    assert calls[0][1]["dense_query"] == "gain margin"
+    assert calls[0][1]["lexical_query"] == "gain margin"
+    assert result["trace"]["execution"][0]["query_role"] == "lexical"
     assert result["trace"]["execution"][0]["queries"] == [
-        {"text": "gain margin control systems", "role": "lexical"},
-        {"text": "how to calculate gain margin", "role": "semantic"},
+        {"text": "gain margin", "role": "lexical"},
     ]
     assert len(result["results"]) == 2
 
@@ -231,7 +258,9 @@ def test_orchestrator_passes_blend_weights_to_hybrid_backend(tmp_path):
 
     backend.hybrid_search = hybrid
     import json
-    response = _response()
+    response = _response(
+        queries=[{"text": "kanban", "role": "lexical"}],
+    )
     planning = QueryPlanner(lambda prompt: json.dumps(response)).plan("kanban formula")
     execute_planned_query(
         planning,
@@ -260,17 +289,63 @@ def test_orchestrator_propagates_validated_filters_and_trace(tmp_path):
 
     backend.hybrid_search = hybrid
     import json
-    response = _response(filters={"course": "SYSEN 6800", "lecture": 3})
+    response = _response(
+        queries=[{"text": "SYSEN 6800 kanban", "role": "lexical"}],
+        filters={"course": "SYSEN 6800", "lecture": 3},
+    )
     planning = QueryPlanner(lambda prompt: json.dumps(response)).plan(
         "Compare SYSEN 6800 Lecture 3 kanban"
     )
     result = execute_planned_query(planning, backend, index_path=tmp_path / "index.json")
 
-    assert calls[0]["filters"] == {"course": "SYSEN 6800", "lecture": 3}
+    assert calls[0]["filters"] == {
+        "course": "SYSEN 6800",
+        "lecture": 3,
+        "source_scope": "course",
+    }
     assert result["trace"]["execution"][0]["filters"] == {
         "course": "SYSEN 6800",
         "lecture": 3,
+        "source_scope": "course",
     }
+
+
+def test_orchestrator_passes_validated_filters_to_hindsight(tmp_path):
+    import json
+
+    backend = CornellOpenVikingBackend(FakeClient())
+    response = _response(
+        intent="personal_memory",
+        backends=["hindsight"],
+        queries=[{"text": "SYSEN 6800 kanban", "role": "lexical"}],
+        filters={"course": "SYSEN 6800", "lecture": 3},
+    )
+    planning = QueryPlanner(lambda prompt: json.dumps(response)).plan(
+        "Compare SYSEN 6800 Lecture 3 kanban"
+    )
+    calls = []
+
+    def recall(query, limit, *, filters):
+        calls.append((query, limit, filters))
+        return {"results": [{"text": "memory"}]}
+
+    result = execute_planned_query(
+        planning,
+        backend,
+        index_path=tmp_path / "index.json",
+        hindsight_recall=recall,
+    )
+
+    assert calls == [
+        (
+            "SYSEN 6800 kanban",
+            5,
+            {"course": "SYSEN 6800", "lecture": 3, "source_scope": "course"},
+        )
+    ]
+    execution = result["trace"]["execution"][0]
+    assert execution["result_count"] == 1
+    assert execution["filters"] == calls[0][2]
 
 
 def test_orchestrator_defaults_to_rrf_even_when_plan_requests_rerank(tmp_path):

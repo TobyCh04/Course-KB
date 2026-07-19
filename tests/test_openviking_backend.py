@@ -14,6 +14,7 @@ from scripts.openviking_backend import (  # noqa: E402
     AudioSourceRejected,
     CornellOpenVikingBackend,
     is_approved_cornell_path,
+    metadata_matches,
     resource_uri,
 )
 
@@ -160,6 +161,17 @@ def test_search_and_read_are_limited_to_cornell_namespace():
 
     with pytest.raises(ValueError, match="outside the Cornell KB namespace"):
         backend.read("viking://resources/other")
+
+
+def test_source_scope_filters_course_and_assessment_material():
+    assert metadata_matches({"source_type": "lecture"}, {"source_scope": "course"})
+    assert metadata_matches({"source_type": "transcript"}, {"source_scope": "course"})
+    assert not metadata_matches({"source_type": "homework"}, {"source_scope": "course"})
+    assert not metadata_matches({"source_type": "exam"}, {"source_scope": "course"})
+    assert metadata_matches({"source_type": "homework"}, {"source_scope": "assessment"})
+    assert metadata_matches({"source_type": "exam"}, {"source_scope": "assessment"})
+    assert not metadata_matches({"source_type": "lecture"}, {"source_scope": "assessment"})
+    assert metadata_matches({"source_type": "exam"}, {"source_scope": "all"})
 
 
 def test_search_applies_metadata_filters_after_dense_retrieval():

@@ -59,3 +59,56 @@ def test_ingest_facts_reports_only_the_failed_batch_and_continues():
     assert results["batches_failed"] == 1
     assert [item["index"] for item in results["failed_items"]] == [1, 2]
     assert {item["status"] for item in results["failed_items"]} == {"unconfirmed"}
+
+
+def test_format_fact_tags_include_namespaced_metadata():
+    from scripts.ingest import format_fact_tags
+
+    tags = format_fact_tags({
+        **_fact(1),
+        "semester": "Fall 2026",
+        "date": "2026-09-01",
+    })
+
+    assert "cornell-kb" in tags
+    assert "course:test-1000" in tags
+    assert "lecture:1" in tags
+    assert "source-type:lecture" in tags
+    assert "scope:course" in tags
+    assert "semester:fall-2026" in tags
+    assert "date:2026-09-01" in tags
+
+
+def test_hindsight_recall_translates_filters_to_strict_tag_payload():
+    from scripts.ingest import hindsight_recall
+
+    class FakeHindsightClient:
+        def __init__(self):
+            self.payload = None
+
+        def post_json(self, _url, payload, **_kwargs):
+            self.payload = payload
+            return {"results": []}
+
+    client = FakeHindsightClient()
+    hindsight_recall(
+        "kanban",
+        filters={
+            "course": "TEST 1000",
+            "lecture": 1,
+            "source_scope": "course",
+            "semester": "Fall 2026",
+            "date": "2026-09-01",
+        },
+        client=client,
+    )
+
+    assert client.payload["tags"] == [
+        "cornell-kb",
+        "course:test-1000",
+        "lecture:1",
+        "scope:course",
+        "semester:fall-2026",
+        "date:2026-09-01",
+    ]
+    assert client.payload["tags_match"] == "all_strict"

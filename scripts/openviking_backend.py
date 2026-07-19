@@ -38,7 +38,8 @@ CURATED_SOURCE_PATHS = frozenset({
 CURATED_DERIVED_ROOT = Path("books/lean-implementation")
 CURATED_DERIVED_EXCLUDED_PARTS = frozenset({"candidates"})
 CURATED_DERIVED_EXTENSIONS = frozenset({".md", ".markdown"})
-METADATA_FILTER_KEYS = frozenset({"course", "lecture", "source_type", "semester", "date"})
+METADATA_FILTER_KEYS = frozenset({"course", "lecture", "source_type", "source_scope", "semester", "date"})
+SOURCE_SCOPES = frozenset({"course", "assessment", "all"})
 
 
 def validate_metadata_filters(filters: dict[str, Any] | None) -> dict[str, Any]:
@@ -54,6 +55,10 @@ def validate_metadata_filters(filters: dict[str, Any] | None) -> dict[str, Any]:
             if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 1000:
                 raise ValueError("lecture filter must be an integer between 1 and 1000")
             normalized[key] = value
+        elif key == "source_scope":
+            if value not in SOURCE_SCOPES:
+                raise ValueError(f"unsupported source_scope: {value}")
+            normalized[key] = value
         else:
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{key} filter must be non-empty text")
@@ -68,6 +73,16 @@ def metadata_matches(metadata: dict[str, Any] | None, filters: dict[str, Any] | 
         return True
     actual = metadata or {}
     for key, expected in normalized.items():
+        if key == "source_scope":
+            raw_type = actual.get("source_type")
+            if raw_type is None:
+                return False
+            actual_type = "source" if str(raw_type).casefold() == "cornell-source" else str(raw_type).casefold()
+            if expected == "course" and actual_type in {"homework", "exam"}:
+                return False
+            if expected == "assessment" and actual_type not in {"homework", "exam"}:
+                return False
+            continue
         value = actual.get(key)
         if value is None:
             return False

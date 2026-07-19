@@ -18,7 +18,7 @@ except ImportError:  # pragma: no cover - exercised by direct CLI use
     from hybrid_retrieval import DEFAULT_EXPERIMENTAL_RERANK_TOP, select_final_sources
     from query_models import PlanningResult, QueryPlan, QueryTrace
 
-HindsightRecall = Callable[[str, int], Any]
+HindsightRecall = Callable[..., Any]
 
 
 def execute_planned_query(
@@ -71,13 +71,16 @@ def execute_planned_query(
         try:
             lexical = next((q for q in openviking_queries if q.role == "lexical"), None)
             semantic = next((q for q in openviking_queries if q.role == "semantic"), None)
+            retrieval_query = (
+                lexical.text if lexical else semantic.text if semantic else plan.original_query
+            )
             result = _execute_openviking(
                 backend,
-                plan.original_query,
+                retrieval_query,
                 plan,
                 index_path=index_path,
-                dense_query=semantic.text if semantic else None,
-                lexical_query=lexical.text if lexical else None,
+                dense_query=semantic.text if semantic else retrieval_query,
+                lexical_query=lexical.text if lexical else retrieval_query,
                 blend_rrf_weight=blend_rrf_weight,
                 blend_reranker_weight=blend_reranker_weight,
                 enable_reranker=enable_reranker,
@@ -107,14 +110,22 @@ def execute_planned_query(
                 "original_query": plan.original_query,
                 "trace_id": plan.trace_id,
                 "backend": backend_name,
+                "filters": plan.filters.to_dict(),
                 "status": "started",
             }
             try:
                 if backend_name == "hindsight":
                     if hindsight_recall is None:
                         raise RuntimeError("Hindsight backend requested but no recall callable configured")
-                    memories = hindsight_recall(planned_query.text, plan.limit)
-                    record["result_count"] = len(memories) if isinstance(memories, list) else 0
+                    memories = hindsight_recall(
+                        planned_query.text,
+                        plan.limit,
+                        filters=plan.filters.to_dict(),
+                    )
+                    if isinstance(memories, dict):
+                        record["result_count"] = len(memories.get("results", []))
+                    else:
+                        record["result_count"] = len(memories) if isinstance(memories, list) else 0
                     record["memories"] = memories
                 else:
                     raise RuntimeError(f"unsupported execution backend: {backend_name}")

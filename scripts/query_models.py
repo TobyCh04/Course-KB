@@ -22,8 +22,9 @@ SUPPORTED_INTENTS = frozenset(
 )
 SUPPORTED_BACKENDS = frozenset({"openviking", "hindsight"})
 SUPPORTED_MODES = frozenset({"dense", "hybrid", "hybrid_rerank"})
-FILTER_KEYS = frozenset({"course", "lecture", "source_type", "semester", "date"})
+FILTER_KEYS = frozenset({"course", "lecture", "source_type", "source_scope", "semester", "date"})
 SOURCE_TYPES = frozenset({"lecture", "textbook", "homework", "exam", "diagram", "transcript", "source"})
+SOURCE_SCOPES = frozenset({"course", "assessment", "all"})
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class QueryFilters:
     course: str | None = None
     lecture: int | None = None
     source_type: str | None = None
+    source_scope: str | None = None
     semester: str | None = None
     date: str | None = None
 
@@ -39,6 +41,8 @@ class QueryFilters:
             raise ValueError("lecture must be between 1 and 1000")
         if self.source_type is not None and self.source_type not in SOURCE_TYPES:
             raise ValueError(f"unsupported source_type: {self.source_type}")
+        if self.source_scope is not None and self.source_scope not in SOURCE_SCOPES:
+            raise ValueError(f"unsupported source_scope: {self.source_scope}")
         for name in ("course", "semester", "date"):
             value = getattr(self, name)
             if value is not None and (not isinstance(value, str) or not value.strip()):
@@ -158,6 +162,7 @@ __all__ = [
     "QueryPlan",
     "QueryTrace",
     "SOURCE_TYPES",
+    "SOURCE_SCOPES",
     "SUPPORTED_BACKENDS",
     "SUPPORTED_INTENTS",
     "SUPPORTED_MODES",
