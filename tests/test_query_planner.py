@@ -103,6 +103,9 @@ def test_planner_accepts_fenced_json_and_explicit_filters():
     "response",
     [
         _response(filters={"course": "ORIE 5100"}),
+        _response(filters={"source_type": "diagram"}),
+        _response(filters={"semester": "Fall 2026"}),
+        _response(filters={"date": "2026-09-01"}),
         _response(filters={"unknown": "x"}),
         _response(limit=0),
         _response(limit=21),
@@ -242,6 +245,32 @@ def test_orchestrator_passes_blend_weights_to_hybrid_backend(tmp_path):
     assert calls[0]["blend_rrf_weight"] == 0.70
     assert calls[0]["blend_reranker_weight"] == 0.30
     assert calls[0]["rerank_top"] == 20
+
+
+def test_orchestrator_propagates_validated_filters_and_trace(tmp_path):
+    backend = CornellOpenVikingBackend(FakeClient())
+    calls = []
+
+    def hybrid(query, **kwargs):
+        calls.append(kwargs)
+        return {
+            "mode": "dense_plus_lexical",
+            "results": [{"uri": f"{CORNELL_NAMESPACE}/doc/a", "fused_score": 0.03}],
+        }
+
+    backend.hybrid_search = hybrid
+    import json
+    response = _response(filters={"course": "SYSEN 6800", "lecture": 3})
+    planning = QueryPlanner(lambda prompt: json.dumps(response)).plan(
+        "Compare SYSEN 6800 Lecture 3 kanban"
+    )
+    result = execute_planned_query(planning, backend, index_path=tmp_path / "index.json")
+
+    assert calls[0]["filters"] == {"course": "SYSEN 6800", "lecture": 3}
+    assert result["trace"]["execution"][0]["filters"] == {
+        "course": "SYSEN 6800",
+        "lecture": 3,
+    }
 
 
 def test_orchestrator_defaults_to_rrf_even_when_plan_requests_rerank(tmp_path):

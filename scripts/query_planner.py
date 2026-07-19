@@ -275,12 +275,24 @@ not supported by the original query."""
             if not match or int(match.group(1)) != lecture:
                 raise PlannerValidationError("planner invented a lecture filter")
         source_type = raw.get("source_type")
+        semester = raw.get("semester")
+        date = raw.get("date")
+        for name, value in (
+            ("source_type", source_type),
+            ("semester", semester),
+            ("date", date),
+        ):
+            if value is not None:
+                if not isinstance(value, str) or not value.strip():
+                    raise PlannerValidationError(f"invalid {name} filter")
+                if value.strip().casefold() not in original_query.casefold():
+                    raise PlannerValidationError(f"planner invented a {name} filter")
         filters = QueryFilters(
             course=course.strip() if isinstance(course, str) else course,
             lecture=lecture,
-            source_type=source_type,
-            semester=raw.get("semester"),
-            date=raw.get("date"),
+            source_type=source_type.strip() if isinstance(source_type, str) else source_type,
+            semester=semester.strip() if isinstance(semester, str) else semester,
+            date=date.strip() if isinstance(date, str) else date,
         )
         filters.validate()
         return filters

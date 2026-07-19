@@ -65,6 +65,7 @@ def execute_planned_query(
             "original_query": plan.original_query,
             "trace_id": plan.trace_id,
             "backend": "openviking",
+            "filters": plan.filters.to_dict(),
             "status": "started",
         }
         try:
@@ -80,6 +81,7 @@ def execute_planned_query(
                 blend_rrf_weight=blend_rrf_weight,
                 blend_reranker_weight=blend_reranker_weight,
                 enable_reranker=enable_reranker,
+                filters=plan.filters.to_dict(),
             )
             provenance = [query.text for query in openviking_queries]
             merge_result(result, provenance)
@@ -157,9 +159,10 @@ def _execute_openviking(
     blend_rrf_weight: float | None = None,
     blend_reranker_weight: float = 0.30,
     enable_reranker: bool = False,
+    filters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if plan.retrieval_mode == "dense":
-        raw = backend.search(dense_query or query, limit=plan.limit)
+        raw = backend.search(dense_query or query, limit=plan.limit, filters=filters)
         return {"mode": "dense", "results": raw.get("resources", [])}
     return backend.hybrid_search(
         query,
@@ -170,6 +173,7 @@ def _execute_openviking(
         lexical_query=lexical_query,
         blend_rrf_weight=blend_rrf_weight,
         blend_reranker_weight=blend_reranker_weight,
+        filters=filters,
         rerank_top=DEFAULT_EXPERIMENTAL_RERANK_TOP
         if enable_reranker and plan.retrieval_mode == "hybrid_rerank"
         else 0,

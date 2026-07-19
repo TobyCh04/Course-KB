@@ -136,6 +136,38 @@ def test_search_and_read_are_limited_to_cornell_namespace():
         backend.read("viking://resources/other")
 
 
+def test_search_applies_metadata_filters_after_dense_retrieval():
+    client = FakeOpenVikingClient(
+        search_response={
+            "resources": [
+                {
+                    "uri": f"{CORNELL_NAMESPACE}/lecture-one",
+                    "score": 0.9,
+                    "metadata": {"course": "SYSEN 6800", "lecture": 1},
+                },
+                {
+                    "uri": f"{CORNELL_NAMESPACE}/lecture-two",
+                    "score": 0.8,
+                    "metadata": {"course": "SYSEN 6800", "lecture": 2},
+                },
+            ]
+        }
+    )
+    backend = CornellOpenVikingBackend(client)
+
+    result = backend.search(
+        "kanban",
+        limit=10,
+        filters={"course": "SYSEN 6800", "lecture": 1},
+    )
+
+    assert [item["uri"] for item in result["resources"]] == [
+        f"{CORNELL_NAMESPACE}/lecture-one"
+    ]
+    assert client.search_calls[0]["limit"] == 10
+    assert "filters" not in client.search_calls[0]
+
+
 def test_read_repairs_stale_filename_to_canonical_tree_uri():
     canonical = f"{CORNELL_NAMESPACE}/uncategorized/cornell-source/course_catalog-abc/course_catalog.md"
     stale = f"{CORNELL_NAMESPACE}/course_catalog.yaml"

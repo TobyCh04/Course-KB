@@ -80,6 +80,31 @@ def test_build_lexical_index_derives_filter_metadata_from_json(tmp_path):
     assert "/uncategorized/cornell-source/" in index.uris[0]
 
 
+def test_lexical_index_search_filters_by_metadata(tmp_path):
+    first = tmp_path / "lecture_one.json"
+    first.write_text(
+        '[{"content": "kanban pull system", "course": "SYSEN 6800", '
+        '"lecture": 1, "source_type": "lecture"}]',
+        encoding="utf-8",
+    )
+    second = tmp_path / "lecture_two.json"
+    second.write_text(
+        '[{"content": "kanban pull system", "course": "SYSEN 6800", '
+        '"lecture": 2, "source_type": "lecture"}]',
+        encoding="utf-8",
+    )
+
+    index = build_lexical_index(tmp_path, extra_files=[first, second])
+    results = index.search(
+        "kanban",
+        top_k=5,
+        filters={"course": "SYSEN 6800", "lecture": 1},
+    )
+
+    assert len(results) == 1
+    assert results[0]["metadata"]["lecture"] == 1
+
+
 def test_lexical_index_serialisation_roundtrip(tmp_path):
     doc = tmp_path / "test.md"
     doc.write_text("# Test\nThis is a test document for BM25.", encoding="utf-8")

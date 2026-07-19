@@ -29,7 +29,9 @@ try:
         CURATED_DERIVED_ROOT,
         CURATED_SOURCE_PATHS,
         is_approved_cornell_path,
+        metadata_matches,
         resource_uri,
+        validate_metadata_filters,
     )
 except ImportError:  # pragma: no cover - exercised by direct CLI use
     from openviking_backend import (
@@ -37,7 +39,9 @@ except ImportError:  # pragma: no cover - exercised by direct CLI use
         CURATED_DERIVED_ROOT,
         CURATED_SOURCE_PATHS,
         is_approved_cornell_path,
+        metadata_matches,
         resource_uri,
+        validate_metadata_filters,
     )
 
 DEFAULT_INDEX_PATH = Path("data/lexical_index.json")
@@ -159,18 +163,26 @@ class LexicalIndex:
             # (where the standard BM25Okapi IDF term can collapse to zero).
             self.bm25 = BM25Plus(self.corpus_tokens)
 
-    def search(self, query: str, top_k: int = 10) -> list[dict[str, Any]]:
-        """Return top lexical matches with BM25 scores."""
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return top lexical matches with BM25 scores and safe metadata filters."""
         if not self.bm25 or not self.corpus_tokens:
             return []
         query_tokens = _tokenize(query)
         if not query_tokens:
             return []
+        normalized_filters = validate_metadata_filters(filters)
         scores = self.bm25.get_scores(query_tokens)
         ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
         results = []
-        for idx, score in ranked[:top_k]:
+        for idx, score in ranked:
             if score <= 0:
+                continue
+            if not metadata_matches(self.metadata[idx], normalized_filters):
                 continue
             results.append({
                 "uri": self.uris[idx],
@@ -179,6 +191,8 @@ class LexicalIndex:
                 "abstract": self.abstracts[idx],
                 "metadata": self.metadata[idx],
             })
+            if len(results) >= top_k:
+                break
         return results
 
     def to_dict(self) -> dict[str, Any]:

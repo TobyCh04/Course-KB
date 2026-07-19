@@ -37,6 +37,72 @@ CURATED_SOURCE_PATHS = frozenset({
 CURATED_DERIVED_ROOT = Path("books/lean-implementation")
 CURATED_DERIVED_EXCLUDED_PARTS = frozenset({"candidates"})
 CURATED_DERIVED_EXTENSIONS = frozenset({".md", ".markdown"})
+METADATA_FILTER_KEYS = frozenset({"course", "lecture", "source_type", "semester", "date"})
+
+
+def validate_metadata_filters(filters: dict[str, Any] | None) -> dict[str, Any]:
+    """Validate and copy the finite metadata filter contract."""
+    if not filters:
+        return {}
+    unknown = set(filters) - METADATA_FILTER_KEYS
+    if unknown:
+        raise ValueError(f"unsupported metadata filters: {sorted(unknown)}")
+    normalized: dict[str, Any] = {}
+    for key, value in filters.items():
+        if key == "lecture":
+            if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 1000:
+                raise ValueError("lecture filter must be an integer between 1 and 1000")
+            normalized[key] = value
+        else:
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{key} filter must be non-empty text")
+            normalized[key] = value.strip()
+    return normalized
+
+
+def metadata_matches(metadata: dict[str, Any] | None, filters: dict[str, Any] | None) -> bool:
+    """Return whether one source metadata record satisfies all filters."""
+    normalized = validate_metadata_filters(filters)
+    if not normalized:
+        return True
+    actual = metadata or {}
+    for key, expected in normalized.items():
+        value = actual.get(key)
+        if value is None:
+            return False
+        if key == "lecture":
+            try:
+                if int(value) != expected:
+                    return False
+            except (TypeError, ValueError):
+                return False
+        elif key == "course":
+            actual_course = "".join(char for char in str(value).casefold() if char.isalnum())
+            expected_course = "".join(char for char in expected.casefold() if char.isalnum())
+            if actual_course != expected_course:
+                return False
+        elif str(value).casefold() != expected.casefold():
+            return False
+    return True
+
+
+def resource_metadata(resource: dict[str, Any]) -> dict[str, Any]:
+    """Merge supported metadata fields from nested, flat, and URI shapes."""
+    metadata = dict(resource.get("metadata") or {})
+    for key in METADATA_FILTER_KEYS:
+        if key in resource and key not in metadata:
+            metadata[key] = resource[key]
+    uri = str(resource.get("uri", ""))
+    if uri.startswith(CORNELL_NAMESPACE + "/"):
+        parts = uri.removeprefix(CORNELL_NAMESPACE + "/").split("/")
+        if len(parts) >= 2:
+            if parts[0] != "uncategorized":
+                metadata.setdefault("course", parts[0].replace("-", " "))
+            metadata.setdefault(
+                "source_type",
+                "source" if parts[1] == "cornell-source" else parts[1],
+            )
+    return metadata
 
 
 class OpenVikingClient(Protocol):
@@ -254,13 +320,32 @@ class CornellOpenVikingBackend:
         self._uri_repair_cache[uri] = repaired
         return repaired
 
-    def search(self, query: str, *, target_uri: str = "", limit: int = 8) -> Any:
+    def search(
+        self,
+        query: str,
+        *,
+        target_uri: str = "",
+        limit: int = 8,
+        filters: dict[str, Any] | None = None,
+    ) -> Any:
         _check_namespace(target_uri or CORNELL_NAMESPACE)
-        return self.client.search(
+        normalized_filters = validate_metadata_filters(filters)
+        raw = self.client.search(
             query=query,
             target_uri=target_uri or CORNELL_NAMESPACE,
             limit=max(1, min(int(limit), 20)),
         )
+        if not normalized_filters:
+            return raw
+        filtered = dict(raw)
+        resources = [
+            resource for resource in raw.get("resources", [])
+            if metadata_matches(resource_metadata(resource), normalized_filters)
+        ]
+        filtered["resources"] = resources
+        filtered["total"] = len(resources)
+        filtered["filters_applied"] = normalized_filters
+        return filtered
 
     def read(self, uri: str, *, limit: int = 20000) -> Any:
         _check_namespace(uri)

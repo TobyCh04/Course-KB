@@ -19,11 +19,19 @@ from typing import Any
 
 try:
     from .lexical_index import DEFAULT_ROOT, LexicalIndex, build_lexical_index, load_index, save_index
-    from .openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
+    from .openviking_backend import (
+        CORNELL_NAMESPACE,
+        CornellOpenVikingBackend,
+        validate_metadata_filters,
+    )
     from . import reranker as reranker_mod
 except ImportError:  # pragma: no cover - exercised by direct CLI use
     from lexical_index import DEFAULT_ROOT, LexicalIndex, build_lexical_index, load_index, save_index
-    from openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
+    from openviking_backend import (
+        CORNELL_NAMESPACE,
+        CornellOpenVikingBackend,
+        validate_metadata_filters,
+    )
     import reranker as reranker_mod
 DEFAULT_OPENVIKING_URL = "http://127.0.0.1:1934"
 DEFAULT_INDEX_PATH = Path("data/lexical_index.json")
@@ -213,10 +221,18 @@ def lexical_search(
     index_path: Path,
     *,
     limit: int = DEFAULT_LEXICAL_LIMIT,
+    filters: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Search the local BM25 index and return normalized candidates."""
     index = load_index(index_path)
-    return [_normalize_lexical_result(r) for r in index.search(query, top_k=limit)]
+    return [
+        _normalize_lexical_result(r)
+        for r in index.search(
+            query,
+            top_k=limit,
+            filters=validate_metadata_filters(filters),
+        )
+    ]
 
 
 def ensure_lexical_index(
@@ -415,6 +431,7 @@ def hybrid_search(
     context_chars: int = reranker_mod.DEFAULT_CONTEXT_CHARS,
     blend_rrf_weight: float | None = None,
     blend_reranker_weight: float = DEFAULT_BLEND_RERANKER_WEIGHT,
+    filters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Search, fuse, read, and optionally rerank with production-safe source context.
 
@@ -424,12 +441,22 @@ def hybrid_search(
     """
     dense_query = dense_query or query
     lexical_query = lexical_query or query
+    filters = validate_metadata_filters(filters)
     rerank_query = _combined_rerank_query(dense_query, lexical_query)
 
-    dense_raw = backend.search(dense_query, limit=search_limit)
+    if filters:
+        dense_raw = backend.search(dense_query, limit=search_limit, filters=filters)
+        lexical_results = lexical_search(
+            lexical_query,
+            index_path,
+            limit=lexical_limit,
+            filters=filters,
+        )
+    else:
+        dense_raw = backend.search(dense_query, limit=search_limit)
+        lexical_results = lexical_search(lexical_query, index_path, limit=lexical_limit)
     dense_all = [_normalize_dense_result(h) for h in dense_raw.get("resources", [])]
     dense_results = _dedupe_by_canonical_uri(dense_all)
-    lexical_results = lexical_search(lexical_query, index_path, limit=lexical_limit)
 
     start = time.monotonic()
     fused = reciprocal_rank_fusion(
@@ -445,6 +472,7 @@ def hybrid_search(
         "dense_query": dense_query,
         "lexical_query": lexical_query,
         "rerank_query": rerank_query,
+        "filters": filters,
         "namespace": CORNELL_NAMESPACE,
         "mode": "dense_plus_lexical",
         "dense_candidates": len(dense_results),

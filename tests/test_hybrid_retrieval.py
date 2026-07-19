@@ -236,6 +236,31 @@ def test_hybrid_search_drops_unreadable_sources_and_records_failures(tmp_path, m
     assert any(item["uri"].endswith("/beta/beta.md") for item in result["source_read_failures"])
 
 
+def test_hybrid_search_passes_filters_to_dense_and_lexical_paths(tmp_path, monkeypatch):
+    backend = CornellOpenVikingBackend(FakeSearchClient())
+    index_path = _write_lexical_index(tmp_path, {})
+    lexical_calls = []
+
+    def _fake_lexical_search(query, index_path, *, limit=10, filters=None):
+        lexical_calls.append(filters)
+        return []
+
+    monkeypatch.setattr(hr, "lexical_search", _fake_lexical_search)
+    hr.hybrid_search(
+        backend,
+        "kanban",
+        index_path=index_path,
+        search_limit=3,
+        lexical_limit=3,
+        top_k=2,
+        rerank_top=0,
+        filters={"course": "SYSEN 6800", "source_type": "lecture"},
+    )
+
+    assert backend.client.search_calls[0]["query"] == "kanban"
+    assert lexical_calls == [{"course": "SYSEN 6800", "source_type": "lecture"}]
+
+
 def test_hybrid_search_returns_fused_results(tmp_path, monkeypatch):
     backend = CornellOpenVikingBackend(FakeSearchClient())
     lexical_results = [
