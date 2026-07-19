@@ -23,4 +23,9 @@ test_models/
 
 # Generated validation artifacts
 test_runs/
+
+# Generated extraction outputs (course content — never commit)
+data/textbook_extracts/
+cornell_pdf_benchmark.txt
+
 formula_comparison.html

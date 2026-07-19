@@ -6,16 +6,13 @@
 
 ## Current Status — 2026-07-19
 
-- **Production OpenViking:** last verified healthy on mini-PC port `1934`, using the production `bge-small-en-v1.5-f16` embedding index and DeepSeek V4 Flash VLM. Production configuration and workspace remain unchanged.
-- **Cornell ingestion safety:** implemented and tested. Audio and raw book binaries are rejected/excluded; the authoritative manifest covers 32 resources: 17 existing reference resources plus 15 TEST PDF resources.
-- **Retrieval foundation:** reranking (Step 6.4), BM25 + dense RRF hybrid retrieval (Step 6.5), and the Step 6.6 planner/orchestrator are implemented. The lexical index preserves OpenViking URI alignment and source metadata.
-- **Realistic reranker checkpoint:** live planner-format replay of 10 Cornell queries now runs the same compact keyword query through dense retrieval and BM25 in one shared RRF pipeline, reads final sources, repairs stale readable URIs, and records missing-source failures. Hybrid without reranking achieved 70% read hit@5 and 70% top-1 support; hybrid with the context/metadata reranker achieved 60% and 60%; zero final source-read errors. Full offline suite: 116 tests passed.
-- **Current checkpoint:** implemented source-tree URI repair, query-focused source context, dense/lexical evidence preservation, document-family metadata, bounded family tie-breaking, and role-aware planner execution. Hybrid BM25+dense RRF is now the default production retrieval path; reranking and the 70/30 blend remain installed but opt-in and deferred until actual course material is available.
-- **Metadata/filter propagation:** course, lecture, source type, source scope, semester, and date filters are now validated against the original query, preserved in `QueryTrace`, applied to BM25 metadata, and applied safely to dense OpenViking results via deterministic post-filtering/URI metadata.
-- **Planner retrieval policy:** the planner emits one compact keyword-only query used for both BM25 and dense retrieval. Formula/definition/explanation wording remains with the original query for the main model; it is not added to retrieval keywords. Normal course queries use `source_scope=course`; homework/exam requests use `assessment`; quiz/study-guide generation uses `all`.
-- **Initial blend checkpoint:** the source-read benchmark remains available for later use. On the live read-only 10-query replay, hybrid RRF-only scored 70% read hit@5 / 70% top-1 support / 0.700 MRR; the initial 70/30 RRF-to-reranker blend scored 60% / 60% / 0.600 MRR. Both branches had zero read errors. This remains a deferred calibration result, not a promotion decision.
-- **Ingestion gate checkpoint:** authoritative `config/source_manifest.json` now covers 32 sources with full SHA-256 hashes. The 15 benchmark PDFs were ingested with `course=TEST`, `semester=TEST`, corpus `test`, classified source types, and no lecture metadata. Live OpenViking canonical-root parity is 32/32; all 15 PDF roots read successfully. Full offline suite: 116 tests passed.
-- **Next plan:** build the textbook processor against approved course material, then continue with homework/exam processing. Keep RRF-only as the default and revisit reranking only after representative course data is available.
+- **Production OpenViking:** verified healthy on mini-PC port `1934`, using `bge-small-en-v1.5-f16` embedding index and DeepSeek V4 Flash VLM. Production config unchanged.
+- **Cornell ingestion safety:** implemented and tested. Manifest covers 32 resources: 17 reference + 15 TEST PDFs.
+- **Retrieval foundation — complete:** BM25 + dense RRF hybrid is the default production retrieval path; reranker installed but deferred. Planner emits one compact keyword-only query; formula/definition/explanation wording stays with the original query for the main model.
+- **Hindsight metadata filtering — complete (`8e93df3`):** course, lecture, source type, source scope, semester, and date filters propagated through the full ingestion + recall chain. Namespaced tags generated during ingest, applied via `tags_match="all_strict"` for deterministic filtered recall. Old untagged memories remain retrievable via unfiltered recall.
+- **Planner keyword refinement — complete (`57b6fc6`):** expanded stopword set from 26 to ~70 tokens covering conversational verbs, pronouns, question words, auxiliary verbs, and filler. Queries now extract purely technical domain terms. RRF-only benchmark stable at 70% read hit@5 / 60% top-1 context hit.
+- **Textbook processor — complete (`1d20f44`):** 6-stage pipeline (overview → 3 parallel extractors → triple verification → OpenViking index prep → cross-reference → Hindsight retain). Default model: DeepSeek V4 Pro via CommandCode. Text-only, operates on pre-extracted PDF text. Tested on real control-design PDF: 11 verified concepts, 100% findable.
+- **Next:** homework/exam processor (Phase 2 step 11), then `cornell-kb` Hermes skill (Phase 3 step 12).
 
 ## Overview
 
@@ -82,8 +79,8 @@ The command validates all source hashes and metadata first, then rebuilds the in
 6. **Primary English Embedding Upgrade** — EmbeddingGemma A/B experiment complete but not promoted; BGE-small remains the production baseline while remote latency and held-out evaluation remain open.
 7. **Reranking Layer** — ✅ Complete: cross-encoder reranking with persistent `bge-reranker-base` server and dense fallback.
 8. **Lexical/Hybrid Retrieval** — ✅ Complete: BM25 lexical retrieval plus dense RRF fusion, canonical URI deduplication, and rebuilt metadata-aware lexical index.
-9. **LLM Query Layer** — ✅ Complete: validated planner contracts, deterministic fallback, lexical/semantic role routing, one shared hybrid execution, provenance, readable-source filtering, query-focused reranker context, and source-read verification. Detailed plan/checkpoint: `.hermes/plans/2026-07-18_053433-step-6-6-llm-enhanced-query.md`.
-10. **Textbook Processor** — Extracts key concepts, definitions, theorems from textbook chapters → indexes source content in OpenViking and retains relevant learning memories in Hindsight
+9. **LLM Query Layer** — ✅ Complete: validated planner contracts, deterministic fallback, lexical/semantic role routing, one shared hybrid execution, provenance, readable-source filtering, query-focused reranker context, and source-read verification.
+10. **Textbook Processor** — ✅ Complete (`1d20f44`): 6-stage pipeline extracts concepts, formulas, examples from textbooks → prepares OpenViking resources with structured metadata tags → retains learning memories in Hindsight. Default model: DeepSeek V4 Pro via CommandCode. 3 parallel extractors (concepts/formulas/examples), triple verification (source-anchored, testable, non-trivial), LaTeX-aware JSON parser. Tested on real control-design PDF: 11 verified concepts, 100% retrieval findability.
 11. **Homework/Exam Processor** — Extracts problem statements, solution patterns, common mistakes → indexes source content in OpenViking and retains review memories in Hindsight
 
 ### Phase 3: Hermes Skill
@@ -122,7 +119,7 @@ Homework/exams ────────┘                    │               
 ## Next Steps
 
 - [ ] Detailed plan for Phase 1
-- [ ] Detailed plan for Phase 2
+- [x] Detailed plan for Phase 2 (steps 6-9: OpenViking retrieval) — [step6_openviking_plan.md](step6_openviking_plan.md)
 - [ ] Detailed plan for Phase 3
 - [ ] Detailed plan for Phase 4
 - [ ] Detailed plan for Phase 5
