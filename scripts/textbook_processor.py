@@ -50,12 +50,21 @@ HINDSIGHT_URL = "http://localhost:8888"
 DEFAULT_BANK_ID = "hermes-history"
 DEFAULT_OUTPUT_DIR = Path("data/textbook_extracts")
 DEFAULT_CHUNK_SIZE = 4000  # chars per chapter section chunk
-DEFAULT_MAX_WORKERS = 3    # 3 parallel extractors, not 5
+DEFAULT_MAX_WORKERS = 2    # bounded two-worker pool for 3 extractor types
 
 
 
 def _load_commandcode_key() -> str:
-    """Load the CommandCode API key from the Hermes config.yaml."""
+    """Load the CommandCode API key from Hermes env/config safely.
+
+    Prefer the provider's configured ``key_env`` (currently ``CMD_API_KEY``)
+    and keep the legacy inline ``api_key`` form as a backward-compatible
+    fallback for older local configurations.
+    """
+    configured_key = load_api_key("CMD_API_KEY")
+    if configured_key:
+        return configured_key
+
     import yaml
     config_path = Path.home() / "AppData" / "Local" / "hermes" / "config.yaml"
     if not config_path.is_file():
@@ -63,10 +72,16 @@ def _load_commandcode_key() -> str:
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     for provider in config.get("custom_providers", []):
         if isinstance(provider, dict) and provider.get("name") == "commandcode":
+            key_env = provider.get("key_env") or "CMD_API_KEY"
+            configured_key = load_api_key(str(key_env))
+            if configured_key:
+                return configured_key
             key = provider.get("api_key")
             if isinstance(key, str) and key.strip():
                 return key.strip()
-            raise RuntimeError("CommandCode provider in config.yaml has no api_key")
+            raise RuntimeError(
+                f"CommandCode provider has no usable {key_env} credential or legacy api_key"
+            )
     raise RuntimeError("CommandCode provider not found in config.yaml custom_providers")
 
 
@@ -713,7 +728,7 @@ def process_textbook(
     extracted = stage1_parallel_extract(
         sections, course_code, chapter, title, llm, max_workers=max_workers
     )
-    total_extracted = sum(len(items) for items in extracted.items())
+    total_extracted = sum(len(items) for items in extracted.values())
     print(f"  Total extracted items: {total_extracted}")
 
     # Stage 1.5: Triple Verification
@@ -721,8 +736,8 @@ def process_textbook(
     verification = stage1_5_verify(extracted, text)
     verified = verification["verified"]
     rejected = verification["rejected"]
-    total_verified = sum(len(items) for items in verified.items())
-    total_rejected = sum(len(items) for items in rejected.items())
+    total_verified = sum(len(items) for items in verified.values())
+    total_rejected = sum(len(items) for items in rejected.values())
     print(f"  Verified: {total_verified} items")
     print(f"  Rejected: {total_rejected} items")
 

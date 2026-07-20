@@ -14,6 +14,10 @@
 - **Textbook processor — complete (`1d20f44`):** 6-stage pipeline (overview → 3 parallel extractors → triple verification → OpenViking index prep → cross-reference → Hindsight retain). Default model: DeepSeek V4 Pro via CommandCode. Text-only, operates on pre-extracted PDF text. Tested on real control-design PDF: 11 verified concepts, 100% findable.
 - **Next:** homework/exam processor (Phase 2 step 11), then `cornell-kb` Hermes skill (Phase 3 step 12).
 
+## Session Working Framework
+
+All Cornell-KB implementation sessions follow [`LUNA_DS_WORKING_FRAMEWORK.md`](LUNA_DS_WORKING_FRAMEWORK.md): GPT-5.6 Luna owns architecture, planning, review, and integration; DeepSeek V4 Pro through CommandCode handles bounded implementation and tests through Hermes delegation. The project-root [`AGENTS.md`](AGENTS.md) makes this contract visible to project-root Hermes/Coding Agent sessions. Runtime query planning remains in the active Hermes turn and must not create a second model connection.
+
 ## Overview
 
 An AI-powered personal knowledge base for Cornell MEng coursework. Ingests lecture slides, audio transcripts, textbooks, homework, and exams through the laptop's OCR/Whisper pipeline. Uses OpenViking as the source-grounded document retrieval backend and Hindsight as the complementary personal, temporal, and graph-memory layer. Generates structured notes, enables natural language search across all material, and supports active recall through quizzing. Integrates with Obsidian for browsable notes and Hermes for conversational access.
