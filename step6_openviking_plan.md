@@ -2,7 +2,7 @@
 
 **Status:** Hardening milestone complete; production ingestion remains blocked by strict changed-content policy and the final isolated end-to-end gate. **Current policy:** hybrid BM25+dense RRF is the default production retrieval path. The reranker and normalized 70/30 blend remain installed and documented, but are opt-in only and deferred until actual course material is available. Production OpenViking uses BGE-small embeddings with DeepSeek V4 Pro as the active VLM. Full Cornell-KB suite: 161 tests passed. Synthetic live indexing/read-back/cleanup passed; no real-course ingestion has occurred.
 **Created:** 2026-07-16
-**Last checkpoint:** 2026-07-20 11:05:04 -0500 — DeepSeek V4 Pro routing, hash-bound source identity, parser-safe provenance, live OpenViking verification, and 161-test verification completed. Remaining blockers and execution plan are recorded in `STATUS.md`.
+**Last checkpoint:** 2026-07-20 11:14:23 -0500 — pre-semester reliability plan recorded: strict source-change rejection, reproducible preflight, complete isolated gate, media fixtures, recovery tooling, student workflow smoke tests, and course onboarding. Retrieval optimization is explicitly deferred until representative course material exists.
 **Depends on:** Step 1 (Whisper/MOSS), Step 2 (pymupdf/GLM-OCR/Qwen3-VL), Step 3 (Hindsight metadata and ingestion), Step 4 (lecture note generation)
 
 ---

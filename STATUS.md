@@ -1,6 +1,6 @@
 # Cornell-KB Project Status
 
-**Last updated:** 2026-07-20 11:05:04 -0500
+**Last updated:** 2026-07-20 11:14:23 -0500
 **Branch:** `master`
 **Latest verified commit:** `d4b4930 fix(cornell-kb): pin llm routing and source identity`
 **Working tree:** clean at the time of this update
@@ -74,6 +74,59 @@ Before any real course write:
 8. Ingest only the allowlisted corpus.
 9. Verify queue status, missing vectors, source read-back, provenance, and retrieval findability.
 10. Preserve rollback artifacts and the sanitized ingestion report.
+
+## Pre-semester work that is not optimization
+
+The next work should prioritize reliability, safety, onboarding, and user workflows rather than retrieval-quality tuning. This work can be completed before real course files exist.
+
+### Priority 1 — strict source-change protection
+
+Change the current hash-bound URI behavior into an explicit default rejection policy:
+
+1. Find the existing path/logical-source identity and stored `source_hash`.
+2. Return success without writing when the incoming hash is identical.
+3. Raise `SourceHashMismatch` when the hash differs.
+4. Require an explicit version/replacement operation for intentional revisions.
+5. Add unit, isolated live, and legacy-resource tests.
+
+### Priority 2 — reproducible preflight command
+
+Create a single pre-ingestion command that validates:
+
+- source-manifest paths and SHA-256 hashes;
+- source types and metadata;
+- namespace and Hindsight-bank safety;
+- OpenViking, embedding, and Hindsight health;
+- exact `deepseek-v4-pro` configuration;
+- dry-run URIs and provenance.
+
+### Priority 3 — one complete isolated end-to-end gate
+
+Check in a repeatable gate covering first write, duplicate idempotency, provenance/source read-back, strict hash mismatch behavior, no memory linking or token explosion, isolated Hindsight retain/recall, rollback inventory, and cleanup with zero test resources remaining.
+
+### Priority 4 — representative media-fixture validation
+
+Run isolated fixtures for Whisper/MOSS, pymupdf, GLM-OCR, Qwen3-VL/diagram extraction, and DeepSeek V4 Pro synthesis. Every artifact must carry source hash, extraction engine, timestamp, and downstream resource status.
+
+### Priority 5 — student workflow smoke tests
+
+Verify source-grounded answers, lecture explanations, quiz generation, new homework-style problems, separate answer keys, empty-retrieval behavior, and Hindsight/OpenViking scope selection.
+
+### Priority 6 — recovery, observability, and onboarding
+
+Add or verify structured ingestion logs, retry/resume checkpoints, queue/error reporting, resource inventories, test cleanup, course manifest templates, naming conventions, course namespaces, and Obsidian output structure.
+
+### Recommended pre-semester sequence
+
+1. Strict hash mismatch rejection.
+2. Preflight command.
+3. Complete isolated end-to-end gate.
+4. Media-fixture validation.
+5. Recovery/checkpoint/cleanup tooling.
+6. Student workflow smoke tests.
+7. Course onboarding templates.
+
+These tasks are higher priority than larger embeddings, reranker calibration, retrieval-weight tuning, latency tuning, or multimodal-model replacement. Those optimizations should wait for representative course material.
 
 ## Deferred, not blockers for first safe course ingestion
 
