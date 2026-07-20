@@ -12,6 +12,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Protocol
 
@@ -297,6 +298,7 @@ class CornellOpenVikingBackend:
         course: str | None = None,
         lecture: int | None = None,
         metadata: dict[str, Any] | None = None,
+        source_hash: str | None = None,
         dry_run: bool = False,
     ) -> IndexedResource:
         path = validate_source_path(source)
@@ -311,14 +313,28 @@ class CornellOpenVikingBackend:
         if dry_run:
             return IndexedResource(str(path), uri, source_type, course, lecture, safe_metadata)
 
+        # Build provenance metadata.  The source hash (when supplied by the
+        # caller) is embedded in the ``args`` payload so every resource carries
+        # its own audit trail regardless of the manifest.
+        provenance = _provenance_args(
+            safe_metadata,
+            course=course,
+            lecture=lecture,
+            source_type=source_type,
+            source_hash=source_hash,
+            source_path=str(path),
+        )
+
         # Only the validated transcript/document path is passed to OpenViking.
         # In particular, no source audio path or audio bytes are ever included.
+        # ``reason`` is deliberately empty to prevent server-side memory linking.
         result = self.client.add_resource(
             path=str(path),
             to=uri,
             wait=True,
             timeout=self.timeout,
-            reason=_reason(source_type, course, lecture, safe_metadata),
+            reason="",
+            args=provenance,
             preserve_structure=True,
         )
         return IndexedResource(str(path), uri, source_type, course, lecture, safe_metadata, result)
@@ -478,6 +494,41 @@ def _safe_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
     return safe
 
 
+def _provenance_args(
+    metadata: dict[str, Any] | None = None,
+    *,
+    course: str | None = None,
+    lecture: int | None = None,
+    source_type: str,
+    source_hash: str | None = None,
+    source_path: str | None = None,
+) -> dict[str, Any]:
+    """Build a structured provenance payload for OpenViking ``args``.
+
+    Every Cornell KB resource stores its audit trail alongside the document so
+    downstream consumers can verify source identity without relying on a
+    separate manifest lookup.
+    """
+    provenance: dict[str, Any] = {
+        "cornell_kb_processor_version": "1.0.0",
+        "ingestion_timestamp": datetime.now(timezone.utc).isoformat(),
+        "source_type": source_type,
+    }
+    if source_hash:
+        provenance["source_hash"] = source_hash
+    if source_path:
+        provenance["source_path"] = source_path
+    if course:
+        provenance["course"] = course
+    if lecture is not None:
+        provenance["lecture"] = lecture
+    if metadata:
+        for key in ("semester", "date", "corpus"):
+            if metadata.get(key) is not None:
+                provenance[key] = metadata[key]
+    return provenance
+
+
 def _reason(
     source_type: str,
     course: str | None,
@@ -555,4 +606,5 @@ __all__ = [
     "is_audio_path",
     "resource_uri",
     "validate_source_path",
+    "_provenance_args",
 ]

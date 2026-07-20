@@ -23,6 +23,21 @@ except ImportError:  # pragma: no cover - exercised by direct CLI use
 HINDSIGHT_URL = "http://localhost:8888"
 DEFAULT_BANK_ID = "hermes-history"
 DEFAULT_BATCH_SIZE = 20
+PRODUCTION_BANK_IDS = frozenset({"hermes-history"})
+
+
+def _require_non_production(bank_id: str, *, allow_production: bool = False) -> None:
+    """Guard against accidental writes to production Hindsight banks.
+
+    Callers targeting ``DEFAULT_BANK_ID`` or another production bank MUST
+    pass ``allow_production=True`` to confirm the intent.  Test and dry-run
+    paths are unaffected.
+    """
+    if not allow_production and bank_id in PRODUCTION_BANK_IDS:
+        raise ValueError(
+            f"Bank {bank_id!r} is a production bank. "
+            "Set allow_production=True only after explicit user authorization."
+        )
 
 
 def _memory_url(url: str, bank_id: str) -> str:
@@ -40,9 +55,11 @@ def hindsight_retain_items(
     url: str = HINDSIGHT_URL,
     timeout: float = 30,
     retries: int = 2,
+    allow_production: bool = False,
     client: JsonHttpClient | Any | None = None,
 ) -> Any:
     """Retain one or more Hindsight memory items in the documented API shape."""
+    _require_non_production(bank_id, allow_production=allow_production)
     if not items:
         raise ValueError("items cannot be empty")
     active_client = client or _make_client(timeout, retries)
@@ -64,17 +81,20 @@ def hindsight_retain(
     bank_id: str = DEFAULT_BANK_ID,
     url: str = HINDSIGHT_URL,
     *,
+    allow_production: bool = False,
     timeout: float = 30,
     retries: int = 2,
     client: JsonHttpClient | Any | None = None,
 ) -> Any:
     """Compatibility wrapper retaining one fact through the batched endpoint."""
+    _require_non_production(bank_id, allow_production=allow_production)
     item = {"content": content, "context": context}
     if tags:
         item["tags"] = tags
     try:
         return hindsight_retain_items(
-            [item], bank_id=bank_id, url=url, timeout=timeout, retries=retries, client=client
+            [item], bank_id=bank_id, url=url, timeout=timeout, retries=retries,
+            allow_production=allow_production, client=client,
         )
     except Exception as error:  # Preserve the historical non-throwing wrapper contract.
         return {"error": str(error)}
@@ -200,6 +220,7 @@ def ingest_facts(
     url: str = HINDSIGHT_URL,
     bank_id: str = DEFAULT_BANK_ID,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    allow_production: bool = False,
     timeout: float = 30,
     retries: int = 2,
     client: JsonHttpClient | Any | None = None,
@@ -211,6 +232,7 @@ def ingest_facts(
     server-side persistence ambiguous, while continuing safely with later
     batches so callers can retry only the reported inputs.
     """
+    _require_non_production(bank_id, allow_production=allow_production)
     if batch_size < 1:
         raise ValueError("batch_size must be at least 1")
 
@@ -259,6 +281,7 @@ def ingest_facts(
                 url=url,
                 timeout=timeout,
                 retries=retries,
+                allow_production=allow_production,
                 client=active_client,
             )
             if isinstance(response, dict) and response.get("error"):

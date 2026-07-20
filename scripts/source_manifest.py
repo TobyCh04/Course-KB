@@ -192,6 +192,7 @@ def dry_run_manifest(
             course=entry.get("course"),
             lecture=entry.get("lecture"),
             metadata=_metadata_for_entry(entry),
+            source_hash=entry.get("source_hash"),
             dry_run=True,
         )
         for path, entry in entries
@@ -298,6 +299,7 @@ def ingest_manifest(
             course=entry.get("course"),
             lecture=entry.get("lecture"),
             metadata=_metadata_for_entry(entry),
+            source_hash=entry.get("source_hash"),
             dry_run=False,
         )
         record.update({"status": "ingested", "uri": resource.uri, "result": resource.result})

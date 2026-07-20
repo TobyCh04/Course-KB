@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -29,7 +31,7 @@ def test_ingest_facts_sends_valid_facts_in_configured_batches():
             return {"stored": len(payload["items"])}
 
     client = FakeHindsightClient()
-    results = ingest_facts([_fact(1), _fact(2), _fact(3)], batch_size=2, client=client)
+    results = ingest_facts([_fact(1), _fact(2), _fact(3)], batch_size=2, client=client, allow_production=True)
 
     assert results["success"] == 3
     assert results["failed"] == 0
@@ -50,7 +52,7 @@ def test_ingest_facts_reports_only_the_failed_batch_and_continues():
             return {"error": "batch rejected"} if self.calls == 1 else {"stored": 1}
 
     results = ingest_facts(
-        [_fact(1), _fact(2), _fact(3)], batch_size=2, client=FakeHindsightClient()
+        [_fact(1), _fact(2), _fact(3)], batch_size=2, client=FakeHindsightClient(), allow_production=True
     )
 
     assert results["success"] == 1
@@ -112,3 +114,51 @@ def test_hindsight_recall_translates_filters_to_strict_tag_payload():
         "date:2026-09-01",
     ]
     assert client.payload["tags_match"] == "all_strict"
+
+
+def test_hindsight_retain_items_blocks_production_bank_by_default():
+    from scripts.ingest import hindsight_retain_items
+
+    with pytest.raises(ValueError, match="production bank"):
+        hindsight_retain_items(
+            [{"content": "test fact " * 5, "context": "test", "tags": ["test"]}],
+            bank_id="hermes-history",
+        )
+
+
+def test_hindsight_retain_items_allows_production_bank_with_flag():
+    from scripts.ingest import hindsight_retain_items
+
+    class FakeHindsightClient:
+        def post_json(self, url, payload, **kwargs):
+            return {"stored": len(payload["items"])}
+
+    result = hindsight_retain_items(
+        [{"content": "test fact " * 5, "context": "test", "tags": ["test"]}],
+        bank_id="hermes-history",
+        allow_production=True,
+        client=FakeHindsightClient(),
+    )
+    assert result["stored"] == 1
+
+
+def test_hindsight_retain_items_allows_non_production_bank():
+    from scripts.ingest import hindsight_retain_items
+
+    class FakeHindsightClient:
+        def post_json(self, url, payload, **kwargs):
+            return {"stored": len(payload["items"])}
+
+    result = hindsight_retain_items(
+        [{"content": "test fact " * 5, "context": "test", "tags": ["test"]}],
+        bank_id="TEST-LIVE-BANK",
+        client=FakeHindsightClient(),
+    )
+    assert result["stored"] == 1
+
+
+def test_ingest_facts_rejects_production_bank_by_default():
+    from scripts.ingest import ingest_facts
+
+    with pytest.raises(ValueError, match="production bank"):
+        ingest_facts([_fact(1)], bank_id="hermes-history")

@@ -79,7 +79,7 @@ def test_transcript_is_indexed_without_audio_metadata(tmp_path):
     }
 
 
-def test_index_file_carries_manifest_metadata_in_ingestion_reason(tmp_path):
+def test_index_file_carries_provenance_in_args_instead_of_reason(tmp_path):
     source = tmp_path / "homework.txt"
     source.write_text("test source", encoding="utf-8")
     client = FakeOpenVikingClient()
@@ -89,18 +89,26 @@ def test_index_file_carries_manifest_metadata_in_ingestion_reason(tmp_path):
         source,
         source_type="homework",
         course="TEST",
+        source_hash="a" * 64,
         metadata={
             "semester": "TEST",
             "corpus": "test",
-            "source_hash": "a" * 64,
         },
     )
 
-    reason = client.add_calls[0]["reason"]
-    assert "course=TEST" in reason
-    assert "semester=TEST" in reason
-    assert "corpus=test" in reason
-    assert "source_hash=" + ("a" * 64) in reason
+    call = client.add_calls[0]
+    # reason must be empty to prevent server-side memory linking.
+    assert call["reason"] == "", f"expected empty reason, got {call['reason']!r}"
+
+    args = call.get("args", {})
+    assert args["source_type"] == "homework"
+    assert args["course"] == "TEST"
+    assert args["source_hash"] == "a" * 64
+    assert args["semester"] == "TEST"
+    assert args["corpus"] == "test"
+    assert "cornell_kb_processor_version" in args
+    assert "ingestion_timestamp" in args
+    assert "source_path" in args
 
 
 def test_dry_run_validates_transcript_without_uploading(tmp_path):
@@ -279,3 +287,70 @@ def test_namespace_prefix_collision_is_rejected():
 
     with pytest.raises(ValueError, match="outside the Cornell KB namespace"):
         backend.read(CORNELL_NAMESPACE + "-unauthorized/resource")
+
+
+def test_provenance_args_includes_processor_version():
+    from scripts.openviking_backend import _provenance_args
+
+    args = _provenance_args(source_type="homework", course="TEST", source_hash="a" * 64)
+
+    assert args["cornell_kb_processor_version"] == "1.0.0"
+    assert args["source_type"] == "homework"
+    assert args["course"] == "TEST"
+    assert args["source_hash"] == "a" * 64
+    assert "ingestion_timestamp" in args
+
+
+def test_provenance_args_includes_optional_metadata():
+    from scripts.openviking_backend import _provenance_args
+
+    args = _provenance_args(
+        {"semester": "FA26", "date": "2026-09-01", "corpus": "test"},
+        source_type="exam",
+        lecture=1,
+        source_path="/tmp/test.pdf",
+    )
+
+    assert args["semester"] == "FA26"
+    assert args["date"] == "2026-09-01"
+    assert args["corpus"] == "test"
+    assert args["lecture"] == 1
+    assert args["source_path"] == "/tmp/test.pdf"
+
+
+def test_memory_linking_disabled_by_empty_reason(tmp_path):
+    source = tmp_path / "chapter.txt"
+    source.write_text("test content", encoding="utf-8")
+    client = FakeOpenVikingClient()
+    backend = CornellOpenVikingBackend(client, root=tmp_path)
+
+    backend.index_file(source, source_type="textbook")
+
+    call = client.add_calls[0]
+    assert call["reason"] == "", "reason must be empty to prevent memory linking"
+
+
+def test_index_file_passes_source_hash_to_provenance(tmp_path):
+    source = tmp_path / "paper.txt"
+    source.write_text("test content", encoding="utf-8")
+    client = FakeOpenVikingClient()
+    backend = CornellOpenVikingBackend(client, root=tmp_path)
+
+    backend.index_file(
+        source, source_type="source", course="TEST",
+        source_hash="abcd1234" * 8,
+    )
+
+    args = client.add_calls[0].get("args", {})
+    assert args.get("source_hash") == "abcd1234" * 8
+
+
+def test_provenance_args_omits_audio_keys():
+    from scripts.openviking_backend import _provenance_args
+
+    args = _provenance_args(
+        {"audio_path": "/tmp/lecture.m4a"},
+        source_type="transcript",
+    )
+
+    assert "audio_path" not in args
