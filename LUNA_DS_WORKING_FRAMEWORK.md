@@ -1,9 +1,10 @@
-# Cornell-KB Luna → DeepSeek V4 Pro Working Framework
+# Cornell-KB Luna → Model-Routed Working Framework
 
 **Status:** Active project operating contract
 **Project:** `C:/Users/TobyC/hermes_related/Cornell_KB/`
 **Primary model:** GPT-5.6 Luna
-**Implementation model:** `deepseek/deepseek-v4-pro` through CommandCode
+**Hermes delegation target:** `zai-org/GLM-5.2` through CommandCode (configured; fresh-session live verification pending)
+**Cornell-KB script model:** DeepSeek V4 Pro through script-specific clients; not controlled by Hermes delegation settings
 **Delegation provider:** `custom:commandcode`
 **Delegation concurrency:** up to 3 children; max spawn depth 1
 
@@ -13,9 +14,9 @@ This document defines how Cornell-KB is designed, implemented, tested, and revie
 
 The central operating model is:
 
-> **Luna is the staff engineer and architecture authority. DeepSeek V4 Pro is the implementation team. Deterministic tests, source-read benchmarks, and provenance checks are the final authority.**
+> **Luna is the staff engineer and architecture authority. The configured delegated implementation model may change independently of Cornell-KB script backends. Deterministic tests, source-read benchmarks, and provenance checks are the final authority.**
 
-Every Cornell-KB coding session must read this document before planning or changing code. The framework is deliberately separate from the volatile project status in `README.md` and `STATUS.md`; read those files as well to determine the current milestone.
+Every Cornell-KB coding session must read this document before planning or changing code. The framework is deliberately separate from the volatile project status in `README.md` and the operational checkpoint `openviking/STATUS.md`; read those files as well to determine the current milestone.
 
 ## 2. Non-negotiable model roles
 
@@ -28,15 +29,15 @@ Luna owns:
 - Breaking work into independently verifiable tasks
 - Defining interfaces, schemas, invariants, and acceptance criteria
 - Deciding whether tasks may run in parallel
-- Reviewing DeepSeek outputs and actual diffs
+- Reviewing delegated-worker outputs and actual diffs
 - Resolving disagreements between implementation and project contracts
 - Approving milestone integration after tests and benchmarks pass
 
-Luna should not spend its quota writing routine boilerplate when DeepSeek can implement it safely.
+Luna should not spend its quota writing routine boilerplate when the delegated worker can implement it safely.
 
-### DeepSeek V4 Pro — bounded implementation worker
+### Delegated implementation worker
 
-DeepSeek owns:
+The configured delegated model owns:
 
 - Focused code changes with explicit file scope
 - Unit and integration tests for the changed behavior
@@ -45,7 +46,7 @@ DeepSeek owns:
 - Running the requested verification commands
 - Returning concrete artifacts and evidence, not a narrative claim of success
 
-DeepSeek must not silently redesign architecture, change production defaults, modify unrelated files, or declare success without running the requested checks.
+The delegated worker must not silently redesign architecture, change production defaults, modify unrelated files, or declare success without running the requested checks.
 
 ### Deterministic tools — final authority
 
@@ -123,11 +124,13 @@ Luna performs one milestone gate covering requirements, architecture, source tra
 Hermes delegation is configured for:
 
 - Provider: `custom:commandcode`
-- Model: `deepseek/deepseek-v4-pro`
+- Model: `zai-org/GLM-5.2`
 - Max concurrent children: 3
 - Max spawn depth: 1
 - Orchestrator mode: enabled
 - MCP tool inheritance: enabled
+
+The model/provider values above are verified in `config.yaml`. A prior smoke test from the long-lived session still reported DeepSeek V4 Pro because that session had cached the old delegation configuration; a fresh-session worker verification remains required. This setting does not change `textbook_processor.py`, `chunker.py`, `note_generator.py`, OpenViking, or Hindsight provider configuration.
 
 Use subagents as much as is practical, but do not parallelize merely to create activity.
 

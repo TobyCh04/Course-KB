@@ -1,8 +1,8 @@
 # Step 6: OpenViking Retrieval Backend — Detailed Plan
 
-**Status:** Steps 6.4, 6.5, and Step 6.6 are complete; the realistic planner/source-read evaluation, initial blend checkpoint, explicit metadata/filter propagation, and the 32-source ingestion gate are complete. **Current policy:** hybrid BM25+dense RRF is the default production retrieval path. The reranker and normalized 70/30 blend remain installed and documented, but are opt-in only and deferred until actual course material is available. Production remains on BGE-small embeddings with DeepSeek V4 Flash as the active production VLM. Full offline suite: 113 tests passed.
+**Status:** Steps 6.4, 6.5, and Step 6.6 are complete; the realistic planner/source-read evaluation, initial blend checkpoint, explicit metadata/filter propagation, and the 32-source ingestion gate are complete. **Current policy:** hybrid BM25+dense RRF is the default production retrieval path. The reranker and normalized 70/30 blend remain installed and documented, but are opt-in only and deferred until actual course material is available. Production remains on BGE-small embeddings with DeepSeek V4 Flash as the active production VLM. Full Cornell-KB suite: 119 tests passed. Textbook dry-run processing and an isolated fake live-ingestion smoke test are complete; real-course ingestion remains gated by OpenViking memory-linking cost.
 **Created:** 2026-07-16
-**Last checkpoint:** 2026-07-19 05:29:46 -0500 — 32-source manifest validation, 15 TEST PDF ingestion, canonical-root/source-read verification, and RRF-only default execution verified. Operational evidence remains in `openviking/STATUS.md` and `test_runs/planner_source_read_reranker_report.md`.
+**Last checkpoint:** 2026-07-20 00:16:37 -0500 — textbook Chapters 1-2 dry-run verification, two-worker smoke verification, and isolated fake live OpenViking/Hindsight ingestion with duplicate/read-back/cleanup gates completed. Operational evidence remains in `openviking/STATUS.md`, `test_runs/`, and `test_runs/planner_source_read_reranker_report.md`.
 **Depends on:** Step 1 (Whisper/MOSS), Step 2 (pymupdf/GLM-OCR/Qwen3-VL), Step 3 (Hindsight metadata and ingestion), Step 4 (lecture note generation)
 
 ---
@@ -11,7 +11,7 @@
 
 Make OpenViking the source-grounded retrieval backend for `cornell-kb`, while retaining Hindsight for personal, temporal, entity, graph, and learning-history memory. Run the media-to-retrieval pipeline on the RTX 4080 laptop, where Whisper and OCR already run, and promote a stronger English embedding/retrieval stack only after a grounded A/B evaluation.
 
-## Current Status — 2026-07-18
+## Current Status — 2026-07-20
 
 - Cornell-safe OpenViking adapter implemented with namespace checks, provenance metadata, dry-run support, injectable clients, and offline tests.
 - Audio and raw book binaries are excluded from future ingestion. Previously indexed `Test.m4a` and `books/lean-implementation/full_text.txt` were removed.
@@ -22,7 +22,15 @@ Make OpenViking the source-grounded retrieval backend for `cornell-kb`, while re
 - Step 6.4 reranking and Step 6.5 BM25 + dense RRF hybrid retrieval are complete. The lexical index has been rebuilt with JSON-derived course/lecture/source metadata while preserving OpenViking URI alignment.
 - **Step 6.6 core implementation is complete.** The planner requires exactly one compact `lexical` and one natural-language `semantic` query; the orchestrator routes them to BM25 and dense retrieval respectively, performs one shared RRF/reranker/read pipeline, preserves provenance, and applies one global cutoff.
 - **Realistic source-read retest complete.** Ten planner-format Cornell queries produced one hybrid execution record each. Hybrid without reranking achieved 70% read hit@5 and 70% top-1 support; the new context/metadata reranker achieved 60% and 60%; zero final source-read errors. The Kp/Routh miss is a verified corpus-coverage gap: neither branch's readable source contains `kp` or `routh`.
-- **Current next gate:** build a larger formula-heavy/multi-source source-read benchmark, calibrate a blended RRF + reranker score, add verified corpus coverage for missing technical topics, then re-test. Keep RRF without reranking as the rollback-safe production default.
+- **Current next gate:** bound or disable OpenViking automatic memory linking during source ingestion, then run a cost-safe fake live smoke test before any real-course write. Keep RRF without reranking as the rollback-safe production default; defer larger formula-heavy/multi-source reranker work until representative course material is available.
+
+### Fake live-ingestion smoke test — complete, production-gated
+
+- Test partition: `TEST-LIVE-2W`; one synthetic textbook source and one Hindsight fact.
+- OpenViking: first run ingested 1, second run skipped the canonical root, and the readable leaf matched the fixture.
+- Hindsight: 1 fact retained and expected observations returned on recall.
+- Cleanup and isolation: fake resource/tree, test bank, and exact internal reason archive removed; no test URIs remained under the Cornell namespace and production Hindsight had zero test-tag matches.
+- Finding: OpenViking memory linking reported 975,780 internal LLM tokens for the tiny fixture. Do not promote this live path to real textbook ingestion until memory linking is bounded, isolated, or disabled.
 
 ### Step 6.6 terminology
 

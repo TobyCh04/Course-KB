@@ -4,19 +4,21 @@
 **Created:** 2026-07-09
 **Location:** `~/hermes_related/Cornell_KB/`
 
-## Current Status — 2026-07-19
+## Current Status — 2026-07-20
 
 - **Production OpenViking:** verified healthy on mini-PC port `1934`, using `bge-small-en-v1.5-f16` embedding index and DeepSeek V4 Flash VLM. Production config unchanged.
 - **Cornell ingestion safety:** implemented and tested. Manifest covers 32 resources: 17 reference + 15 TEST PDFs.
 - **Retrieval foundation — complete:** BM25 + dense RRF hybrid is the default production retrieval path; reranker installed but deferred. Planner emits one compact keyword-only query; formula/definition/explanation wording stays with the original query for the main model.
 - **Hindsight metadata filtering — complete (`8e93df3`):** course, lecture, source type, source scope, semester, and date filters propagated through the full ingestion + recall chain. Namespaced tags generated during ingest, applied via `tags_match="all_strict"` for deterministic filtered recall. Old untagged memories remain retrievable via unfiltered recall.
 - **Planner keyword refinement — complete (`57b6fc6`):** expanded stopword set from 26 to ~70 tokens covering conversational verbs, pronouns, question words, auxiliary verbs, and filler. Queries now extract purely technical domain terms. RRF-only benchmark stable at 70% read hit@5 / 60% top-1 context hit.
-- **Textbook processor — complete (`1d20f44`):** 6-stage pipeline (overview → 3 parallel extractors → triple verification → OpenViking index prep → cross-reference → Hindsight retain). Default model: DeepSeek V4 Pro via CommandCode. Text-only, operates on pre-extracted PDF text. Tested on real control-design PDF: 11 verified concepts, 100% findable.
-- **Next:** homework/exam processor (Phase 2 step 11), then `cornell-kb` Hermes skill (Phase 3 step 12).
+- **Textbook processor — complete (`1d20f44`, worker-default follow-up `0b095bb`):** 6-stage pipeline (overview → 3 parallel extractors → triple verification → OpenViking index prep → cross-reference → Hindsight retain). Script-specific DeepSeek V4 Pro client, bounded two-worker default, text-only over pre-extracted PDF text. Chapters 1-2 and a two-worker synthetic fixture passed dry-run verification.
+- **Live-ingestion safety gate — complete for test data:** isolated `TEST-LIVE-2W` and `TEST-FCS5` OpenViking/Hindsight tests passed write, read-back, duplicate protection, isolation, no automatic `memory_linking`, and cleanup. No actual course material has been ingested because the school term has not started.
+- **Assessment processor + model-neutral study skill — implemented:** `scripts/assessment_processor.py` normalizes homework/exam problems with `scope:assessment`; `scripts/study_commands.py` provides deterministic fixtures plus injected-LLM quiz variants; `scripts/cornell_commands.py` provides thin `/quiz`, `/review`, `/explain`, `/ingest`, and `/connect` helpers. The `cornell-kb` Hermes skill now instructs the active main model to retrieve OpenViking/Hindsight context first, then generate genuinely new quizzes/reviews with separate answer keys and provenance. HW1 TEST smoke outputs and focused tests pass. No actual course material has been ingested.
+- **Next:** keep the production corpus unchanged. The model-neutral skill workflow is ready; when actual course files become available, run the manifest gate before ingestion, then use the active Hermes model with retrieved OpenViking/Hindsight context for assessment study.
 
 ## Session Working Framework
 
-All Cornell-KB implementation sessions follow [`LUNA_DS_WORKING_FRAMEWORK.md`](LUNA_DS_WORKING_FRAMEWORK.md): GPT-5.6 Luna owns architecture, planning, review, and integration; DeepSeek V4 Pro through CommandCode handles bounded implementation and tests through Hermes delegation. The project-root [`AGENTS.md`](AGENTS.md) makes this contract visible to project-root Hermes/Coding Agent sessions. Runtime query planning remains in the active Hermes turn and must not create a second model connection.
+All Cornell-KB implementation sessions follow [`LUNA_DS_WORKING_FRAMEWORK.md`](LUNA_DS_WORKING_FRAMEWORK.md): GPT-5.6 Luna owns architecture, planning, review, and integration; the currently configured Hermes delegation target is GLM-5.2 through CommandCode, while Cornell-KB scripts retain their own provider configuration and currently use DeepSeek V4 Pro. The GLM delegation switch still requires fresh-session live verification. The project-root [`AGENTS.md`](AGENTS.md) makes this contract visible to project-root Hermes/Coding Agent sessions. Runtime query planning remains in the active Hermes turn and must not create a second model connection.
 
 ## Overview
 
@@ -84,7 +86,7 @@ The command validates all source hashes and metadata first, then rebuilds the in
 7. **Reranking Layer** — ✅ Complete: cross-encoder reranking with persistent `bge-reranker-base` server and dense fallback.
 8. **Lexical/Hybrid Retrieval** — ✅ Complete: BM25 lexical retrieval plus dense RRF fusion, canonical URI deduplication, and rebuilt metadata-aware lexical index.
 9. **LLM Query Layer** — ✅ Complete: validated planner contracts, deterministic fallback, lexical/semantic role routing, one shared hybrid execution, provenance, readable-source filtering, query-focused reranker context, and source-read verification.
-10. **Textbook Processor** — ✅ Complete (`1d20f44`): 6-stage pipeline extracts concepts, formulas, examples from textbooks → prepares OpenViking resources with structured metadata tags → retains learning memories in Hindsight. Default model: DeepSeek V4 Pro via CommandCode. 3 parallel extractors (concepts/formulas/examples), triple verification (source-anchored, testable, non-trivial), LaTeX-aware JSON parser. Tested on real control-design PDF: 11 verified concepts, 100% retrieval findability.
+10. **Textbook Processor** — ✅ Complete (`1d20f44`, `0b095bb`): 6-stage pipeline extracts concepts, formulas, examples from textbooks → prepares OpenViking resources with structured metadata tags → retains learning memories in Hindsight. Script-specific DeepSeek V4 Pro client, bounded two-worker default, triple verification, and LaTeX-aware JSON parser. Chapters 1-2 and the two-worker synthetic fixture passed dry-run verification. The isolated live fake-namespace gate passed, but OpenViking memory linking consumed 975,780 internal LLM tokens; real-course ingestion remains blocked until that behavior is bounded or disabled.
 11. **Homework/Exam Processor** — Extracts problem statements, solution patterns, common mistakes → indexes source content in OpenViking and retains review memories in Hindsight
 
 ### Phase 3: Hermes Skill
