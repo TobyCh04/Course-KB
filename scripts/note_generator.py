@@ -25,9 +25,9 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 
 try:  # Supports both direct script execution and package imports.
-    from .common_client import JsonHttpClient, load_api_key as _load_api_key
+    from .common_client import DeepSeekClient, JsonHttpClient, load_api_key as _load_api_key
 except ImportError:  # pragma: no cover - direct CLI use
-    from common_client import JsonHttpClient, load_api_key as _load_api_key
+    from common_client import DeepSeekClient, JsonHttpClient, load_api_key as _load_api_key
 
 _HTTP_CLIENTS = {}
 
@@ -40,26 +40,22 @@ def _shared_http_client(timeout):
     return _HTTP_CLIENTS[key]
 
 # ── LLM Backend Configuration ──────────────────────────────────────────────
+#
+# Cornell-KB note generation is hardened to a single text LLM route: DeepSeek
+# V4 Pro through the official DeepSeek API. Alternate cloud (OpenAI) and local
+# (Ollama text-generation) backends have been removed from the generation path
+# to keep the Cornell script model consistent with the Hermes delegation route
+# (see references/deepseek-v4-pro-routing.md). Local OCR/vision/STT engines
+# (Qwen3-VL, GLM-OCR, Whisper, MOSS) remain separate media components and are
+# NOT affected by this routing — they live in diagrams.py and transcribe.py.
 
-BACKENDS = {
-    "deepseek": {
-        "api": "https://api.deepseek.com/v1/chat/completions",
-        "model": "deepseek-v4-pro",
-        "env_key": "DEEPSEEK_API_KEY",
-    },
-    "openai": {
-        "api": "https://api.openai.com/v1/chat/completions",
-        "model": "gpt-4o",
-        "env_key": "OPENAI_API_KEY",
-    },
-    "ollama": {
-        "api": "http://100.104.205.105:11434/api/generate",
-        "model": "qwen3-vl:8b",
-        "env_key": None,
-    },
-}
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+DEFAULT_MODEL = "deepseek-v4-pro"
+DEFAULT_BACKEND = "deepseek"  # retained for backward-compatible call signatures
 
-DEFAULT_BACKEND = "deepseek"
+# Single allowed backend. ``call_llm`` rejects any other value so a stale
+# caller cannot silently fall back to a removed cloud/local route.
+ALLOWED_BACKENDS = {"deepseek"}
 
 HINDSIGHT_URL = "http://localhost:8888"
 DEFAULT_OUTPUT_DIR = os.path.expanduser("~/obsidian-vault/Cornell")
@@ -74,70 +70,50 @@ def load_api_key(key_name="DEEPSEEK_API_KEY"):
 
 # ── LLM Call ───────────────────────────────────────────────────────────────
 
-def call_llm(prompt, backend=DEFAULT_BACKEND, model=None, api_key=None, api_url=None, ollama_url=None, http_client=None):
-    """Call an LLM backend and return the response text."""
-    config = BACKENDS.get(backend, BACKENDS[DEFAULT_BACKEND])
+def call_llm(prompt, backend=DEFAULT_BACKEND, model=None, api_key=None, api_url=None,
+             ollama_url=None, http_client=None, deepseek_client=None):
+    """Call the DeepSeek V4 Pro chat completion API and return the response text.
 
-    if api_url:
-        url = api_url
-    elif backend == "ollama" and ollama_url:
-        url = ollama_url
-    else:
-        url = config["api"]
+    Cornell-KB note generation uses a single hardened text LLM route: DeepSeek
+    V4 Pro via the official DeepSeek API (endpoint ``DEEPSEEK_API_URL``, model
+    ``DEFAULT_MODEL``, credential ``DEEPSEEK_API_KEY`` from the shared loader).
+    The ``ollama_url`` parameter is accepted for backward-compatible call sites
+    but is intentionally unused — local Ollama text generation is no longer an
+    allowed Cornell generation backend. Local OCR/vision engines in
+    ``diagrams.py`` and ``transcribe.py`` are unaffected.
 
-    model = model or config["model"]
-
-    if not api_key and config.get("env_key"):
-        api_key = load_api_key(config["env_key"])
-        if not api_key:
-            print(f"Error: {config['env_key']} environment variable not set")
-            print(f"Set it via env var or in ~/AppData/Local/hermes/.env")
-            sys.exit(1)
-
-    if backend == "ollama":
-        return _call_ollama(prompt, model, url, http_client=http_client)
-    return _call_openai_compat(prompt, model, url, api_key, http_client=http_client)
-
-
-def _call_openai_compat(prompt, model, url, api_key, http_client=None):
-    """Call an OpenAI-compatible chat endpoint through the shared client."""
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3,
-        "max_tokens": 8192,
-    }
-    client = http_client or _shared_http_client(600)
-    try:
-        result = client.post_json(
-            url,
-            payload,
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=600,
+    ``deepseek_client`` and ``http_client`` are injection points for tests so
+    they never need a real API key or network call. Callers may still override
+    ``model``/``api_key``/``api_url`` for custom DeepSeek-compatible endpoints,
+    but the defaults are always the canonical DeepSeek route.
+    """
+    if backend not in ALLOWED_BACKENDS:
+        raise ValueError(
+            f" Cornell-KB note generation only permits the 'deepseek' backend "
+            f"(got {backend!r}). OpenAI and Ollama text-generation backends have "
+            f"been removed; use DeepSeek V4 Pro via the DeepSeek API."
         )
-        return result["choices"][0]["message"]["content"]
-    except Exception as error:
-        print(f"LLM API error: {error}")
+
+    model = model or DEFAULT_MODEL
+    if model != DEFAULT_MODEL:
+        raise ValueError(f"Cornell-KB requires {DEFAULT_MODEL}; got {model!r}")
+    url = api_url or DEEPSEEK_API_URL
+    resolved_key = api_key or load_api_key("DEEPSEEK_API_KEY")
+    if not resolved_key:
+        print("Error: DEEPSEEK_API_KEY is not set")
+        print("Set it via env var or in ~/AppData/Local/hermes/.env")
         sys.exit(1)
 
-
-def _call_ollama(prompt, model, url, http_client=None):
-    """Call Ollama through the shared retrying JSON client."""
-    client = http_client or _shared_http_client(300)
+    client = deepseek_client or DeepSeekClient(
+        api_key=resolved_key,
+        api_url=url,
+        http_client=http_client or _shared_http_client(600),
+        timeout=600,
+    )
     try:
-        result = client.post_json(
-            url,
-            {
-                "model": model,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": 0.3, "num_predict": 8192},
-            },
-            timeout=300,
-        )
-        return result.get("response", "")
+        return client.complete(prompt, model=model, max_tokens=8192, temperature=0.3)
     except Exception as error:
-        print(f"Ollama API error: {error}")
+        print(f"DeepSeek API error: {error}")
         sys.exit(1)
 
 
@@ -1229,7 +1205,7 @@ def generate_notes(transcript_text=None, facts=None, diagrams=None,
     )
 
     print(f"Generating notes for {course_code} Lecture {lecture}: {topic}")
-    print(f"  Backend: {backend}, Model: {model or BACKENDS[backend]['model']}")
+    print(f"  Backend: {backend}, Model: {model or DEFAULT_MODEL}")
     print(f"  Inputs: {'transcript, ' if transcript_text else ''}"
           f"{'facts (' + str(len(facts)) + '), ' if facts else ''}"
           f"{'diagrams (' + str(len(diagrams)) + ')' if diagrams else ''}")
@@ -1324,14 +1300,17 @@ def main():
     parser.add_argument("--lecture", type=int, required=True, help="Lecture number")
     parser.add_argument("--topic", default="Lecture Content", help="Lecture topic name")
 
-    # LLM backend
-    parser.add_argument("--backend", default=DEFAULT_BACKEND, choices=list(BACKENDS.keys()),
-                        help="LLM backend (default: deepseek)")
-    parser.add_argument("--model", help="Override model name")
-    parser.add_argument("--api-key", help="Override API key")
-    parser.add_argument("--api-url", help="Override API URL (for custom OpenAI-compat endpoints)")
-    parser.add_argument("--ollama-url", default=BACKENDS["ollama"]["api"],
-                        help="Ollama API URL")
+    # LLM backend (hardened to DeepSeek V4 Pro via the official DeepSeek API)
+    parser.add_argument("--backend", default=DEFAULT_BACKEND, choices=sorted(ALLOWED_BACKENDS),
+                        help="LLM backend (only 'deepseek' is supported; default: deepseek)")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help="Override model name (default: deepseek-v4-pro)")
+    parser.add_argument("--api-key", help="Override DeepSeek API key (default: DEEPSEEK_API_KEY)")
+    parser.add_argument("--api-url", default=DEEPSEEK_API_URL,
+                        help="Override DeepSeek chat completion endpoint (default: https://api.deepseek.com/v1/chat/completions)")
+    # ``--ollama-url`` retained as a no-op for backward CLI compatibility; local
+    # Ollama text generation is no longer an allowed Cornell generation backend.
+    parser.add_argument("--ollama-url", default=None,
+                        help="(deprecated, ignored) Ollama text generation is no longer used; use diagrams.py/transcribe.py for local vision/OCR.")
 
     # Output
     parser.add_argument("--output", help="Output file path (default: auto in ~/obsidian-vault/Cornell/)")

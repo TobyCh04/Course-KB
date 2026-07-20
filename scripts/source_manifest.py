@@ -265,10 +265,10 @@ def _canonical_resource_uri(path: Path, entry: dict[str, Any], root: Path) -> st
     return resource_uri(
         path,
         course=entry.get("course"),
-        source_type=entry["source_type"],
+        source_type=entry.get("source_type", "source"),
         root=root,
+        source_hash=entry.get("source_hash"),
     )
-
 
 def ingest_manifest(
     manifest: str | Path | dict[str, Any],

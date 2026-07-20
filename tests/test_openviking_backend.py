@@ -108,7 +108,7 @@ def test_index_file_carries_provenance_in_args_instead_of_reason(tmp_path):
     assert args["corpus"] == "test"
     assert "cornell_kb_processor_version" in args
     assert "ingestion_timestamp" in args
-    assert "source_path" in args
+    assert "provenance_source_path" in args
 
 
 def test_dry_run_validates_transcript_without_uploading(tmp_path):
@@ -237,7 +237,10 @@ def test_search_merges_manifest_metadata_for_filters_not_in_uri(tmp_path):
         ),
         encoding="utf-8",
     )
-    canonical = resource_uri(source, course="TEST", source_type="homework", root=tmp_path)
+    canonical = resource_uri(
+        source, course="TEST", source_type="homework", root=tmp_path,
+        source_hash=source_hash,
+    )
     client = FakeOpenVikingClient(
         search_response={
             "resources": [
@@ -315,7 +318,7 @@ def test_provenance_args_includes_optional_metadata():
     assert args["date"] == "2026-09-01"
     assert args["corpus"] == "test"
     assert args["lecture"] == 1
-    assert args["source_path"] == "/tmp/test.pdf"
+    assert args["provenance_source_path"] == "/tmp/test.pdf"
 
 
 def test_memory_linking_disabled_by_empty_reason(tmp_path):
@@ -354,3 +357,116 @@ def test_provenance_args_omits_audio_keys():
     )
 
     assert "audio_path" not in args
+
+
+def test_resource_uri_binds_authoritative_source_hash(tmp_path):
+    source = tmp_path / "lecture.txt"
+    source.write_text("version one", encoding="utf-8")
+
+    first = resource_uri(
+        source, course="SYSEN 5100", source_type="transcript", root=tmp_path,
+        source_hash="a" * 64,
+    )
+    same = resource_uri(
+        source, course="SYSEN 5100", source_type="transcript", root=tmp_path,
+        source_hash="A" * 64,
+    )
+    changed = resource_uri(
+        source, course="SYSEN 5100", source_type="transcript", root=tmp_path,
+        source_hash="b" * 64,
+    )
+
+    assert first == same
+    assert changed != first
+
+
+def test_resource_uri_rejects_invalid_source_hash(tmp_path):
+    source = tmp_path / "lecture.txt"
+    source.write_text("version one", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="64-character SHA-256"):
+        resource_uri(source, root=tmp_path, source_hash="not-a-hash")
+
+
+def test_index_file_uri_changes_when_source_hash_changes(tmp_path):
+    """Changed content at the same path must not silently reuse the old URI.
+
+    This is the end-to-end identity safety guarantee: when an authoritative
+    source hash is supplied to ``index_file``, the canonical URI becomes
+    content-addressed, so re-ingesting edited content at the same path produces
+    a distinct URI instead of aliasing the stale resource.
+    """
+    source = tmp_path / "homework.txt"
+    source.write_text("original submission", encoding="utf-8")
+    client = FakeOpenVikingClient()
+    backend = CornellOpenVikingBackend(client, root=tmp_path)
+
+    original = backend.index_file(
+        source, source_type="homework", course="TEST",
+        source_hash="a" * 64, dry_run=True,
+    )
+    revised = backend.index_file(
+        source, source_type="homework", course="TEST",
+        source_hash="b" * 64, dry_run=True,
+    )
+
+    assert original.uri != revised.uri, (
+        "changed source_hash must produce a different canonical URI"
+    )
+    assert original.uri.startswith(CORNELL_NAMESPACE + "/")
+    assert revised.uri.startswith(CORNELL_NAMESPACE + "/")
+    # Both URIs keep the same 3-part root structure so canonical_resource_root
+    # and namespace parsing remain valid.
+    assert original.uri.count("/") == revised.uri.count("/")
+
+
+def test_load_manifest_metadata_skips_malformed_hash_without_crashing(tmp_path):
+    """A malformed manifest hash must not break backend construction.
+
+    ``_load_manifest_metadata`` is a tolerant loader used by search/filter
+    callers; ``validate_manifest`` remains the authoritative ingestion gate.
+    A single bad entry must be skipped, not crash the whole backend.
+    """
+    good = tmp_path / "good.txt"
+    good.write_text("good content", encoding="utf-8")
+    good_hash = hashlib.sha256(good.read_bytes()).hexdigest()
+    manifest_path = tmp_path / "config" / "source_manifest.json"
+    manifest_path.parent.mkdir()
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "sources": [
+                    {
+                        "source_path": str(good),
+                        "source_hash": good_hash,
+                        "source_type": "homework",
+                        "course": "TEST",
+                        "corpus": "test",
+                    },
+                    {
+                        "source_path": str(tmp_path / "bad.txt"),
+                        "source_hash": "not-a-real-hash",
+                        "source_type": "homework",
+                        "course": "TEST",
+                        "corpus": "test",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "bad.txt").write_text("bad content", encoding="utf-8")
+
+    # Construction must not raise despite the malformed hash entry.
+    backend = CornellOpenVikingBackend(FakeOpenVikingClient(), root=tmp_path)
+
+    # The good entry is still indexed by its canonical root; the bad one is
+    # simply absent rather than crashing the loader.
+    good_uri = resource_uri(
+        good, course="TEST", source_type="homework", root=tmp_path,
+        source_hash=good_hash,
+    )
+    from scripts.openviking_backend import canonical_resource_root
+
+    assert canonical_resource_root(good_uri) in backend._manifest_metadata
+    assert len(backend._manifest_metadata) == 1

@@ -79,7 +79,9 @@ class TextbookLLMClient:
     ) -> None:
         self.api_key = api_key or _load_deepseek_key()
         self.api_url = api_url
-        self.model = model
+        if model != DEFAULT_MODEL:
+            raise ValueError(f"Cornell-KB requires {DEFAULT_MODEL}; got {model!r}")
+        self.model = DEFAULT_MODEL
         self.http_client = JsonHttpClient(timeout=timeout, retries=2)
         self.timeout = timeout
 

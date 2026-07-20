@@ -188,15 +188,26 @@ def resource_uri(
     course: str | None = None,
     source_type: str = "source",
     root: str | Path | None = None,
+    source_hash: str | None = None,
 ) -> str:
-    """Build a deterministic URI without exposing unrelated absolute paths."""
+    """Build a deterministic URI without exposing unrelated absolute paths.
+
+    When an authoritative source hash is available, include it in the identity
+    so changed content at the same path cannot silently reuse the old resource.
+    Legacy callers without a hash retain the historical path-based identity.
+    """
     path = Path(source).expanduser().resolve()
     base = Path(root).expanduser().resolve() if root else path.parent
     try:
         display_path = path.relative_to(base).as_posix()
     except ValueError:
         display_path = path.name
-    identity = "/".join(part for part in (course, source_type, display_path) if part)
+    identity_parts = [part for part in (course, source_type, display_path) if part]
+    if source_hash:
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", source_hash):
+            raise ValueError("source_hash must be a full 64-character SHA-256")
+        identity_parts.append(source_hash.casefold())
+    identity = "/".join(identity_parts)
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
     parts = [_slug(course or "uncategorized"), _slug(source_type), _slug(path.stem)]
     return f"{CORNELL_NAMESPACE}/{'/'.join(parts)}-{digest}"
@@ -247,12 +258,21 @@ class CornellOpenVikingBackend:
             path = Path(str(entry["source_path"])).expanduser()
             if not path.is_absolute():
                 path = self.root / path
-            uri = resource_uri(
-                path,
-                course=entry.get("course"),
-                source_type=entry.get("source_type", "source"),
-                root=self.root,
-            )
+            # ``resource_uri`` validates the source hash shape when one is
+            # present; a malformed manifest entry must not crash backend
+            # construction (search/filter callers depend on this tolerant
+            # loader).  ``validate_manifest`` remains the authoritative gate
+            # for ingestion; here we simply skip unparseable entries.
+            try:
+                uri = resource_uri(
+                    path,
+                    course=entry.get("course"),
+                    source_type=entry.get("source_type", "source"),
+                    root=self.root,
+                    source_hash=entry.get("source_hash"),
+                )
+            except ValueError:
+                continue
             metadata_by_root[canonical_resource_root(uri)] = {
                 key: entry[key]
                 for key in (
@@ -309,7 +329,13 @@ class CornellOpenVikingBackend:
             "source_type": source_type,
         })
         safe_metadata = {key: value for key, value in safe_metadata.items() if value is not None}
-        uri = resource_uri(path, course=course, source_type=source_type, root=self.root)
+        uri = resource_uri(
+            path,
+            course=course,
+            source_type=source_type,
+            root=self.root,
+            source_hash=source_hash,
+        )
         if dry_run:
             return IndexedResource(str(path), uri, source_type, course, lecture, safe_metadata)
 
@@ -517,7 +543,7 @@ def _provenance_args(
     if source_hash:
         provenance["source_hash"] = source_hash
     if source_path:
-        provenance["source_path"] = source_path
+        provenance["provenance_source_path"] = source_path
     if course:
         provenance["course"] = course
     if lecture is not None:

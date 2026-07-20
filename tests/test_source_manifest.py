@@ -87,3 +87,58 @@ def test_build_lexical_index_from_manifest_adds_external_test_source(tmp_path):
     assert len(results) == 1
     assert results[0]["metadata"]["course"] == "TEST"
     assert results[0]["metadata"]["source_hash"] == manifest["sources"][0]["source_hash"]
+
+
+def test_manifest_canonical_root_changes_with_authoritative_source_hash(tmp_path):
+    """Changed content at the same path must yield a distinct canonical root.
+
+    The manifest's authoritative ``source_hash`` is folded into canonical
+    resource identity, so ``ingest_manifest`` with ``only_missing=True`` will
+    ingest revised content rather than silently skipping it as an existing
+    canonical root.  This is the manifest-level identity safety guarantee:
+    a stale URI can never alias changed content.
+    """
+    from scripts.source_manifest import manifest_canonical_roots
+
+    pdf = tmp_path / "homework.pdf"
+
+    # ``manifest_canonical_roots`` validates the manifest against live file
+    # content, so each roots computation must run while the file holds the
+    # content whose sha256 is recorded in that manifest.
+    pdf.write_bytes(b"version one content")
+    hash_one = hashlib.sha256(pdf.read_bytes()).hexdigest()
+    manifest_one = _manifest_for(pdf, course="TEST", corpus="test")
+    manifest_one["sources"][0]["source_hash"] = hash_one
+    roots_one = manifest_canonical_roots(manifest_one, tmp_path)
+
+    pdf.write_bytes(b"version two content, revised submission")
+    hash_two = hashlib.sha256(pdf.read_bytes()).hexdigest()
+    manifest_two = _manifest_for(pdf, course="TEST", corpus="test")
+    manifest_two["sources"][0]["source_hash"] = hash_two
+    roots_two = manifest_canonical_roots(manifest_two, tmp_path)
+
+    assert len(roots_one) == 1
+    assert len(roots_two) == 1
+    assert roots_one != roots_two, (
+        "changed source_hash at the same path must produce a different "
+        "canonical root so ingestion cannot silently reuse the old URI"
+    )
+
+
+def test_manifest_identical_hash_yields_same_canonical_root(tmp_path):
+    """Identical content (identical hash) at the same path is idempotent.
+
+    This preserves deterministic idempotency: re-running manifest validation or
+    ingestion for unchanged content must address the same canonical root.
+    """
+    from scripts.source_manifest import manifest_canonical_roots
+
+    pdf = tmp_path / "homework.pdf"
+    pdf.write_bytes(b"stable content")
+    manifest = _manifest_for(pdf, course="TEST", corpus="test")
+
+    first = manifest_canonical_roots(manifest, tmp_path)
+    second = manifest_canonical_roots(manifest, tmp_path)
+
+    assert first == second
+    assert len(first) == 1

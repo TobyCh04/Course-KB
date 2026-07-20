@@ -90,6 +90,8 @@ def call_deepseek(
     client: DeepSeekClient | None = None,
 ) -> str:
     """Call DeepSeek once; retry policy belongs to the chunk worker."""
+    if model != DEFAULT_MODEL:
+        raise ValueError(f"Cornell-KB requires {DEFAULT_MODEL}; got {model!r}")
     active_client = client or DeepSeekClient(api_key=api_key, api_url=api_url or DEEPSEEK_URL, timeout=timeout)
     return active_client.complete(prompt, model=model)
 
@@ -351,7 +353,7 @@ def main() -> None:
     parser.add_argument("--course", required=True, help="Course code (e.g., SYSEN 5100)")
     parser.add_argument("--lecture", type=int, required=True, help="Lecture number")
     parser.add_argument("--topic", default=None, help="Topic name")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name (default: deepseek-v4-pro)")
+    parser.add_argument("--model", choices=(DEFAULT_MODEL,), default=DEFAULT_MODEL, help="DeepSeek model (fixed to deepseek-v4-pro)")
     parser.add_argument("--output", default=None, help="Output JSON file path")
     parser.add_argument("--api-url", default=DEEPSEEK_URL, help="OpenAI-compatible API URL")
     parser.add_argument("--api-key", help="API key (otherwise DEEPSEEK_API_KEY is loaded safely)")
