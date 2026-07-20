@@ -18,7 +18,7 @@
 
 ## Session Working Framework
 
-All Cornell-KB implementation sessions follow [`LUNA_DS_WORKING_FRAMEWORK.md`](LUNA_DS_WORKING_FRAMEWORK.md): GPT-5.6 Luna owns architecture, planning, review, and integration; the currently configured Hermes delegation target is GLM-5.2 through CommandCode, while Cornell-KB scripts retain their own provider configuration and currently use DeepSeek V4 Pro. The GLM delegation switch still requires fresh-session live verification. The project-root [`AGENTS.md`](AGENTS.md) makes this contract visible to project-root Hermes/Coding Agent sessions. Runtime query planning remains in the active Hermes turn and must not create a second model connection.
+All Cornell-KB implementation sessions follow [`LUNA_DS_WORKING_FRAMEWORK.md`](LUNA_DS_WORKING_FRAMEWORK.md): GPT-5.6 Luna owns architecture, planning, review, and integration; Hermes delegation, textbook processing, chunking, note generation, and runtime query actions use DeepSeek V4 Pro through the DeepSeek API. The project-root [`AGENTS.md`](AGENTS.md) makes this contract visible to Hermes/Coding Agent sessions. Runtime query planning remains in the active Hermes turn and must not create a second model connection.
 
 ## Overview
 

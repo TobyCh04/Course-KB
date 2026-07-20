@@ -3,9 +3,9 @@
 **Status:** Active project operating contract
 **Project:** `C:/Users/TobyC/hermes_related/Cornell_KB/`
 **Primary model:** GPT-5.6 Luna
-**Hermes delegation target:** `zai-org/GLM-5.2` through CommandCode (configured; fresh-session live verification pending)
-**Cornell-KB script model:** DeepSeek V4 Pro through script-specific clients; not controlled by Hermes delegation settings
-**Delegation provider:** `custom:commandcode`
+**Hermes delegation target:** `deepseek-v4-pro` through the DeepSeek API
+**Cornell-KB script model:** DeepSeek V4 Pro through the DeepSeek API
+**Delegation provider:** `deepseek`
 **Delegation concurrency:** up to 3 children; max spawn depth 1
 
 ## 1. Purpose
@@ -123,14 +123,14 @@ Luna performs one milestone gate covering requirements, architecture, source tra
 
 Hermes delegation is configured for:
 
-- Provider: `custom:commandcode`
-- Model: `zai-org/GLM-5.2`
+- Provider: `deepseek`
+- Model: `deepseek-v4-pro`
 - Max concurrent children: 3
 - Max spawn depth: 1
 - Orchestrator mode: enabled
 - MCP tool inheritance: enabled
 
-The model/provider values above are verified in `config.yaml`. A prior smoke test from the long-lived session still reported DeepSeek V4 Pro because that session had cached the old delegation configuration; a fresh-session worker verification remains required. This setting does not change `textbook_processor.py`, `chunker.py`, `note_generator.py`, OpenViking, or Hindsight provider configuration.
+The model/provider values above are verified in Hermes `config.yaml`, and DeepSeek API connectivity is verified by `hermes doctor`. This setting aligns delegation with `textbook_processor.py`, `chunker.py`, and `note_generator.py`; OpenViking and Hindsight remain separate storage/retrieval services.
 
 Use subagents as much as is practical, but do not parallelize merely to create activity.
 

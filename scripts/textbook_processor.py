@@ -12,7 +12,7 @@ Pipeline (borrowing cangjie's staged discipline):
   Stage 4: Retrieval test       → verify concepts are findable via RRF
   Stage 5: Hindsight retain     → learning memories with structured tags
 
-Default model: DeepSeek V4 Pro via CommandCode (text-only, no vision needed).
+Default model: DeepSeek V4 Pro via the DeepSeek API (text-only, no vision needed).
 The processor operates on already-extracted text (pymupdf output or OCR output).
 
 Usage:
@@ -43,8 +43,8 @@ except ImportError:  # pragma: no cover - direct CLI use
 
 # ── Configuration ───────────────────────────────────────────────────────────
 
-DEFAULT_API_URL = "https://api.commandcode.ai/provider/v1/chat/completions"
-DEFAULT_MODEL = "deepseek/deepseek-v4-pro"
+DEFAULT_API_URL = "https://api.deepseek.com/v1/chat/completions"
+DEFAULT_MODEL = "deepseek-v4-pro"
 
 HINDSIGHT_URL = "http://localhost:8888"
 DEFAULT_BANK_ID = "hermes-history"
@@ -54,41 +54,20 @@ DEFAULT_MAX_WORKERS = 2    # bounded two-worker pool for 3 extractor types
 
 
 
-def _load_commandcode_key() -> str:
-    """Load the CommandCode API key from Hermes env/config safely.
-
-    Prefer the provider's configured ``key_env`` (currently ``CMD_API_KEY``)
-    and keep the legacy inline ``api_key`` form as a backward-compatible
-    fallback for older local configurations.
-    """
-    configured_key = load_api_key("CMD_API_KEY")
-    if configured_key:
-        return configured_key
-
-    import yaml
-    config_path = Path.home() / "AppData" / "Local" / "hermes" / "config.yaml"
-    if not config_path.is_file():
-        raise RuntimeError(f"Hermes config not found at {config_path}")
-    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    for provider in config.get("custom_providers", []):
-        if isinstance(provider, dict) and provider.get("name") == "commandcode":
-            key_env = provider.get("key_env") or "CMD_API_KEY"
-            configured_key = load_api_key(str(key_env))
-            if configured_key:
-                return configured_key
-            key = provider.get("api_key")
-            if isinstance(key, str) and key.strip():
-                return key.strip()
-            raise RuntimeError(
-                f"CommandCode provider has no usable {key_env} credential or legacy api_key"
-            )
-    raise RuntimeError("CommandCode provider not found in config.yaml custom_providers")
+def _load_deepseek_key() -> str:
+    """Load the DeepSeek API key from the environment or Hermes .env."""
+    key = load_api_key("DEEPSEEK_API_KEY")
+    if not key:
+        raise RuntimeError(
+            "DEEPSEEK_API_KEY is not set. Set it in the environment or Hermes .env."
+        )
+    return key
 
 
 # ── LLM Client ──────────────────────────────────────────────────────────────
 
 class TextbookLLMClient:
-    """OpenAI-compatible LLM client for textbook extraction via CommandCode."""
+    """OpenAI-compatible LLM client for textbook extraction via DeepSeek."""
 
     def __init__(
         self,
@@ -98,7 +77,7 @@ class TextbookLLMClient:
         *,
         timeout: float = 600,
     ) -> None:
-        self.api_key = api_key or _load_commandcode_key()
+        self.api_key = api_key or _load_deepseek_key()
         self.api_url = api_url
         self.model = model
         self.http_client = JsonHttpClient(timeout=timeout, retries=2)
@@ -829,7 +808,7 @@ def main() -> None:
     process_parser.add_argument("--api-url", default=DEFAULT_API_URL,
                                 help=f"LLM API URL")
     process_parser.add_argument("--model", default=DEFAULT_MODEL,
-                                help=f"Model name")
+                                help=f"Model name (default: {DEFAULT_MODEL})")
     process_parser.add_argument("--api-key", default=None, help="API key override")
     process_parser.add_argument("--dry-run", action="store_true",
                                 help="Prepare but do not ingest to Hindsight/OpenViking")

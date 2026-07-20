@@ -6,7 +6,7 @@ This directory is the Cornell-KB project root. Before any implementation, mainte
 2. Read `README.md` and the latest relevant plan/status file.
 3. Inspect `git status --short --branch` before editing.
 4. Treat GPT-5.6 Luna as the staff engineer and architecture authority.
-5. Use the configured delegated GLM-5.2 subagents through CommandCode for bounded implementation, tests, documentation, and independent audits whenever practical; verify fresh-session routing before relying on the switch. Cornell-KB scripts have separate provider configuration and currently use DeepSeek V4 Pro.
+5. Use the configured DeepSeek V4 Pro delegation through the DeepSeek API for bounded implementation, tests, documentation, and independent audits whenever practical. Cornell-KB scripts and Hermes runtime LLM actions use the same DeepSeek API route.
 6. Never parallelize overlapping writers or let a subagent silently redesign the architecture.
 7. Require actual test commands and artifacts from every implementation subagent.
 8. Keep OpenViking source-grounded retrieval, Hindsight memory, namespace safety, manifest validation, provenance, and production rollback rules from the framework intact.
