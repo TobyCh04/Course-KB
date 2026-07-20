@@ -1,6 +1,6 @@
 # Step 3: Hindsight Integration — Detailed Plan
 
-**Status:** PLANNED
+**Status:** IMPLEMENTED with fail-closed bank isolation and structured provenance; production rollout remains gated by the isolated end-to-end validation and cleanup checklist in `STATUS.md`.
 **Created:** 2026-07-13
 **Depends on:** Step 1 (Whisper/MOSS), Step 2 (pymupdf/GLM-OCR/Qwen3-VL)
 
