@@ -43,12 +43,13 @@
 
 ## Verification
 
-- **227 tests pass** (was 161 at start of hardening milestone; 203 after Priority 1-3; +24 media fixture tests)
+- **249 tests pass** (was 161 at start of hardening milestone; 227 after Priority 1-4; +22 recovery tooling tests)
 - Python compilation clean
 - `git diff --check` clean
 - Preflight: 4/4 PASS (offline), SKILL.md conflict resolved
 - E2E gate: 8/8 PASS (offline), covers first write, idempotency, hash-mismatch, provenance, read-back, Hindsight, rollback inventory, cleanup
 - Media fixtures: 6/6 PASS (offline), all 6 processors produce artifacts with source_hash, extraction_engine, ingestion_timestamp, downstream_resource_status
+- Recovery tooling: 22/22 PASS — structured JSONL logging, checkpoint/resume, resource inventory snapshot/diff, test cleanup (OpenViking + Hindsight), course manifest template
 
 ## Remaining pre-semester work
 
@@ -72,9 +73,15 @@ Run isolated fixtures for Whisper/MOSS, pymupdf, GLM-OCR, Qwen3-VL/diagram extra
 - Valid engines: whisper-large-v3-turbo, moss-0.9b, pymupdf, glm-ocr, qwen3-vl:8b, deepseek-v4-pro
 - Valid statuses: pending_openviking, indexed, pending_hindsight, complete, skipped, failed
 
-### Priority 5: Recovery/checkpoint/cleanup tooling ⬜
+### Priority 5: Recovery/checkpoint/cleanup tooling ✅
 
 Structured ingestion logs, retry/resume checkpoints, queue/error reporting, resource inventories, test cleanup, course manifest templates.
+
+- `scripts/ingestion_logger.py` — JSONL ingestion log (append-only) with `IngestionLogger` class; `read_logged_uris()` + `build_resume_manifest()` for checkpoint/resume
+- `scripts/resource_inventory.py` — `snapshot()` pre/post ingestion, `diff()` before/after comparison, save/load as JSON
+- `scripts/test_cleanup.py` — `run_cleanup()` removes test resources by URI, pattern, or manifest entry; dry-run mode; Hindsight bank cleanup
+- `config/course_manifest_template.json` — starter template with 6 source types (textbook, transcript, homework, exam, slides, derived OCR)
+- `tests/test_recovery_tooling.py` — 22 offline tests covering logger, checkpoint/resume, inventory snapshot/diff, cleanup, template validation
 
 ### Priority 6: Student workflow smoke tests ⬜
 
@@ -99,4 +106,4 @@ Naming conventions, course namespaces, Obsidian output structure.
 - Real course ingestion performed only from a validated manifest. ⬜
 - OpenViking and Hindsight read-back checks pass. ⬜
 - No unexpected memory-linking activity or internal token explosion. ⬜
-- Full tests, syntax checks, and retrieval/source-read checks pass. ✅ (227 tests)
+- Full tests, syntax checks, and retrieval/source-read checks pass. ✅ (249 tests)
