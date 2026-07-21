@@ -20,18 +20,14 @@ try:
     from .openviking_backend import (
         AUDIO_EXTENSIONS,
         CORNELL_NAMESPACE,
-        RAW_BOOK_FILENAMES,
         CornellOpenVikingBackend,
         is_approved_cornell_path,
         resource_uri,
     )
 except ImportError:  # pragma: no cover - direct CLI use
-    from hybrid_retrieval import save_index
-    from lexical_index import LexicalIndex, build_lexical_index
     from openviking_backend import (
         AUDIO_EXTENSIONS,
         CORNELL_NAMESPACE,
-        RAW_BOOK_FILENAMES,
         CornellOpenVikingBackend,
         is_approved_cornell_path,
         resource_uri,
@@ -140,8 +136,6 @@ def validate_manifest(
             errors.append(f"{label}.derived_hash requires derived_text_path")
         if source_path.suffix.lower() in AUDIO_EXTENSIONS:
             errors.append(f"{label} selects forbidden audio: {source_path}")
-        if source_path.name in RAW_BOOK_FILENAMES:
-            errors.append(f"{label} selects forbidden raw book: {source_path}")
         if not isinstance(entry["source_type"], str) or not entry["source_type"].strip():
             errors.append(f"{label}.source_type must be non-empty text")
         source_hash = entry["source_hash"]
@@ -277,7 +271,13 @@ def ingest_manifest(
     base_url: str = "http://127.0.0.1:1934",
     only_missing: bool = True,
 ) -> dict[str, Any]:
-    """Ingest manifest sources, optionally skipping existing canonical roots."""
+    """Ingest manifest sources, optionally skipping existing canonical roots.
+
+    With strict source-change rejection, any entry whose logical source
+    (course + source_type + stem) already exists with a different content
+    hash will raise ``SourceHashMismatch`` rather than silently creating a
+    duplicate resource.
+    """
     _, entries = _validated_entries(manifest, root)
     base = Path(root).expanduser().resolve()
     backend = CornellOpenVikingBackend(base_url=base_url, root=base)
@@ -286,6 +286,7 @@ def ingest_manifest(
         existing = {_canonical_root(item["uri"]) for item in backend._resource_files() if item.get("uri")}
     ingested: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    idempotent: list[dict[str, Any]] = []
     for path, entry in entries:
         expected_root = _canonical_root(_canonical_resource_uri(path, entry, base))
         record = {"source_path": str(path), "canonical_root": expected_root}
@@ -302,15 +303,21 @@ def ingest_manifest(
             source_hash=entry.get("source_hash"),
             dry_run=False,
         )
-        record.update({"status": "ingested", "uri": resource.uri, "result": resource.result})
-        ingested.append(record)
+        if isinstance(resource.result, dict) and resource.result.get("status") == "skipped":
+            record["status"] = "skipped_idempotent"
+            idempotent.append(record)
+        else:
+            record.update({"status": "ingested", "uri": resource.uri, "result": resource.result})
+            ingested.append(record)
         existing.add(expected_root)
     return {
         "manifest_sources": len(entries),
         "ingested": ingested,
         "skipped": skipped,
+        "idempotent": idempotent,
         "ingested_count": len(ingested),
         "skipped_count": len(skipped),
+        "idempotent_count": len(idempotent),
     }
 
 

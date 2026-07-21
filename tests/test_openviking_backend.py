@@ -125,17 +125,11 @@ def test_dry_run_validates_transcript_without_uploading(tmp_path):
 
 
 def test_tree_applies_curated_policy_and_skips_unapproved_files(tmp_path):
+    """Only CURATED_SOURCE_PATHS entries are approved; everything else skipped."""
     config = tmp_path / "config"
     config.mkdir()
     (config / "course_catalog.yaml").write_text("courses: {}", encoding="utf-8")
-    derived = tmp_path / "books" / "lean-implementation" / "house-of-lean"
-    derived.mkdir(parents=True)
-    (derived / "SKILL.md").write_text("final derived study note", encoding="utf-8")
-    candidates = tmp_path / "books" / "lean-implementation" / "candidates"
-    candidates.mkdir(parents=True)
-    (candidates / "draft.md").write_text("candidate draft", encoding="utf-8")
     (tmp_path / "lecture.txt").write_text("lecture transcript", encoding="utf-8")
-    (tmp_path / "full_text.txt").write_text("raw book extraction", encoding="utf-8")
     (tmp_path / "test_models").mkdir()
     (tmp_path / "test_models" / "fixture.txt").write_text("fixture", encoding="utf-8")
     client = FakeOpenVikingClient()
@@ -143,12 +137,11 @@ def test_tree_applies_curated_policy_and_skips_unapproved_files(tmp_path):
 
     resources = backend.index_tree(tmp_path, source_type="cornell-source", dry_run=True)
 
-    assert {Path(item.source_path).name for item in resources} == {"course_catalog.yaml", "SKILL.md"}
-    assert len(resources) == 2
+    assert {Path(item.source_path).name for item in resources} == {"course_catalog.yaml"}
+    assert len(resources) == 1
     assert client.add_calls == []
     assert is_approved_cornell_path(config / "course_catalog.yaml", tmp_path)
     assert not is_approved_cornell_path(tmp_path / "lecture.txt", tmp_path)
-    assert not is_approved_cornell_path(candidates / "draft.md", tmp_path)
 
 def test_resource_uri_is_deterministic_for_idempotent_reingestion(tmp_path):
     source = tmp_path / "lecture.txt"
@@ -470,3 +463,145 @@ def test_load_manifest_metadata_skips_malformed_hash_without_crashing(tmp_path):
 
     assert canonical_resource_root(good_uri) in backend._manifest_metadata
     assert len(backend._manifest_metadata) == 1
+
+
+# ---------------------------------------------------------------------------
+# Strict source-change rejection tests
+# ---------------------------------------------------------------------------
+
+
+def test_logical_source_stem_strips_digest():
+    from scripts.openviking_backend import _logical_source_stem
+
+    assert _logical_source_stem("lecture-01-a1b2c3d4e5f6") == "lecture-01"
+    assert _logical_source_stem("homework_1-0123456789ab") == "homework_1"
+    # No digest (less than 13 chars): returned as-is.
+    assert _logical_source_stem("plain-stem") == "plain-stem"
+    # Trailing hyphen but not enough hex: returned as-is.
+    assert _logical_source_stem("short-ab12") == "short-ab12"
+
+
+def test_logical_source_key_matches_same_source_different_hash(tmp_path):
+    from scripts.openviking_backend import _logical_source_key, resource_uri
+
+    source = tmp_path / "lecture.txt"
+    source.write_text("content v1", encoding="utf-8")
+
+    uri_one = resource_uri(
+        source, course="SYSEN 5100", source_type="transcript", root=tmp_path,
+        source_hash="a" * 64,
+    )
+    uri_two = resource_uri(
+        source, course="SYSEN 5100", source_type="transcript", root=tmp_path,
+        source_hash="b" * 64,
+    )
+
+    assert uri_one != uri_two  # different hashes → different URIs
+    assert _logical_source_key(uri_one) == _logical_source_key(uri_two)  # same logical source
+
+
+def test_index_file_raises_mismatch_when_same_logical_source_different_hash(tmp_path):
+    """Strict rejection: same logical source + different hash → SourceHashMismatch."""
+    from scripts.openviking_backend import SourceHashMismatch, resource_uri
+
+    source = tmp_path / "homework.txt"
+    source.write_text("original submission", encoding="utf-8")
+
+    existing_uri = resource_uri(
+        source, course="TEST", source_type="homework", root=tmp_path,
+        source_hash="a" * 64,
+    )
+
+    class StrictFakeClient(FakeOpenVikingClient):
+        def ls(self, uri, **kwargs):
+            # Return a fake tree so _logical_source_index finds the existing resource.
+            return [
+                {"isDir": True, "uri": existing_uri.rsplit("/", 1)[0]},
+            ]
+
+    # Pre-populate resource files cache with the existing URI so the
+    # logical-source index picks it up.
+    client = StrictFakeClient()
+    client._fake_files = [{"uri": existing_uri}]
+    backend = CornellOpenVikingBackend(client, root=tmp_path)
+    backend._resource_files_cache = client._fake_files
+
+    # Now try to ingest the same logical source with a DIFFERENT hash.
+    with pytest.raises(SourceHashMismatch, match="was changed"):
+        backend.index_file(
+            source, source_type="homework", course="TEST",
+            source_hash="b" * 64,
+        )
+
+    # Verify we never called add_resource.
+    assert client.add_calls == []
+
+
+def test_index_file_is_idempotent_when_same_logical_source_same_hash(tmp_path):
+    """Same logical source + same hash → idempotent skip, no add_resource call."""
+    from scripts.openviking_backend import resource_uri
+
+    source = tmp_path / "homework.txt"
+    source.write_text("stable content", encoding="utf-8")
+
+    existing_uri = resource_uri(
+        source, course="TEST", source_type="homework", root=tmp_path,
+        source_hash="a" * 64,
+    )
+
+    class IdempotentFakeClient(FakeOpenVikingClient):
+        def ls(self, uri, **kwargs):
+            return [{"isDir": True, "uri": existing_uri.rsplit("/", 1)[0]}]
+
+    client = IdempotentFakeClient()
+    client._fake_files = [{"uri": existing_uri}]
+    backend = CornellOpenVikingBackend(client, root=tmp_path)
+    backend._resource_files_cache = client._fake_files
+
+    resource = backend.index_file(
+        source, source_type="homework", course="TEST",
+        source_hash="a" * 64,
+    )
+
+    assert client.add_calls == []
+    assert resource.result == {"status": "skipped", "reason": "identical_source_hash"}
+    assert resource.uri == existing_uri
+
+
+def test_index_file_indexes_normally_when_no_existing_logical_source(tmp_path):
+    """No existing logical source → normal ingestion proceeds."""
+    source = tmp_path / "new_file.txt"
+    source.write_text("brand new content", encoding="utf-8")
+
+    class EmptyFakeClient(FakeOpenVikingClient):
+        def ls(self, uri, **kwargs):
+            return []
+
+    client = EmptyFakeClient()
+    backend = CornellOpenVikingBackend(client, root=tmp_path)
+
+    resource = backend.index_file(
+        source, source_type="homework", course="TEST",
+        source_hash="c" * 64,
+    )
+
+    assert len(client.add_calls) == 1
+    assert resource.uri.startswith(CORNELL_NAMESPACE + "/")
+    assert resource.result == {"uri": resource.uri, "status": "completed"}
+
+
+def test_index_file_without_hash_skips_strict_check(tmp_path):
+    """When no source_hash is provided, skip the strict rejection check."""
+    source = tmp_path / "legacy_file.txt"
+    source.write_text("legacy content", encoding="utf-8")
+
+    client = FakeOpenVikingClient()
+    backend = CornellOpenVikingBackend(client, root=tmp_path)
+
+    resource = backend.index_file(
+        source, source_type="homework", course="TEST",
+        # No source_hash — legacy path, no strict check.
+    )
+
+    assert len(client.add_calls) == 1
+    assert resource.uri.startswith(CORNELL_NAMESPACE + "/")

@@ -25,20 +25,12 @@ AUDIO_EXTENSIONS = frozenset({
 SUPPORTED_EXTENSIONS = frozenset({
     ".csv", ".json", ".md", ".markdown", ".pdf", ".tex", ".txt", ".yaml", ".yml"
 })
-RAW_BOOK_FILENAMES = frozenset({"full_text.txt", "lean-implementation-tools.pdf"})
 
-# The default Cornell namespace is a curated study corpus, not a mirror of the
-# project repository. Keep this allowlist explicit so scripts, plans,
-# benchmarks, raw books, duplicate exports, and infrastructure notes cannot be
-# indexed accidentally.
 CURATED_SOURCE_PATHS = frozenset({
     "config/course_catalog.yaml",
     "data/freq_response_diagrams.json",
     "data/freq_response_part2.json",
 })
-CURATED_DERIVED_ROOT = Path("books/lean-implementation")
-CURATED_DERIVED_EXCLUDED_PARTS = frozenset({"candidates"})
-CURATED_DERIVED_EXTENSIONS = frozenset({".md", ".markdown"})
 METADATA_FILTER_KEYS = frozenset({"course", "lecture", "source_type", "source_scope", "semester", "date"})
 SOURCE_SCOPES = frozenset({"course", "assessment", "all"})
 
@@ -144,6 +136,15 @@ class UnsupportedSource(ValueError):
     """Raised for files that are not approved Cornell KB source artifacts."""
 
 
+class SourceHashMismatch(ValueError):
+    """Raised when a changed source is ingested without explicit replacement.
+
+    Same logical source identity (course + source_type + stem) but different
+    content hash means the file was modified.  Strict rejection is the default;
+    callers must explicitly request a versioned replacement to proceed.
+    """
+
+
 @dataclass(frozen=True)
 class IndexedResource:
     """The safe, auditable description of one indexing operation."""
@@ -209,8 +210,46 @@ def resource_uri(
         identity_parts.append(source_hash.casefold())
     identity = "/".join(identity_parts)
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
-    parts = [_slug(course or "uncategorized"), _slug(source_type), _slug(path.stem)]
+    # Derive a disambiguated stem.  When multiple files share the same
+    # filename in different subdirectories (e.g.  books/lean-implementation/
+    # */SKILL.md), include the immediate parent directory so stems do not
+    # collide and trigger SourceHashMismatch.
+    stem = path.stem
+    if display_path and "/" in display_path:
+        parent = Path(display_path).parent.name
+        if parent:
+            stem = f"{parent}-{stem}"
+    parts = [_slug(course or "uncategorized"), _slug(source_type), _slug(stem)]
     return f"{CORNELL_NAMESPACE}/{'/'.join(parts)}-{digest}"
+
+
+def _logical_source_stem(uri: str) -> str:
+    """Extract the filename stem from a URI, stripping the hash-derived digest.
+
+    URI format: .../course-slug/source-type-slug/stem-12hexdigest
+    Returns the stem without the trailing ``-digest`` so callers can detect
+    whether two resources represent the same logical source.
+    """
+    last = uri.rsplit("/", 1)[-1]
+    if len(last) >= 13 and last[-13] == "-":
+        return last[:-13]
+    return last
+
+
+def _logical_source_key(uri: str) -> str:
+    """Return a logical-source key for detecting same-source-different-hash.
+
+    Two resources with the same key represent the same logical source
+    (course + source_type + stem) regardless of content hash.  When the
+    URIs differ but the keys match, the source was changed.
+    """
+    prefix = CORNELL_NAMESPACE + "/"
+    if not uri.startswith(prefix):
+        return uri
+    parts = uri.removeprefix(prefix).split("/")
+    if len(parts) >= 3:
+        return f"{parts[0]}/{parts[1]}/{_logical_source_stem(parts[2])}"
+    return uri
 
 
 def canonical_resource_root(uri: str) -> str:
@@ -339,6 +378,30 @@ class CornellOpenVikingBackend:
         if dry_run:
             return IndexedResource(str(path), uri, source_type, course, lecture, safe_metadata)
 
+        # --- Strict source-change rejection ---
+        # Before writing, check whether the same logical source already exists
+        # with a different content hash.  Identical hash → idempotent skip.
+        # Different hash → SourceHashMismatch (caller must explicitly replace).
+        if source_hash is not None:
+            logical_key = _logical_source_key(uri)
+            expected_root = canonical_resource_root(uri)
+            existing_index = self._logical_source_index()
+            existing_root = existing_index.get(logical_key)
+            if existing_root is not None:
+                if existing_root == expected_root:
+                    # Same logical source, same hash → idempotent; skip.
+                    return IndexedResource(
+                        str(path), uri, source_type, course, lecture,
+                        safe_metadata, {"status": "skipped", "reason": "identical_source_hash"},
+                    )
+                # Same logical source, different hash → reject.
+                raise SourceHashMismatch(
+                    f"Source {str(path)!r} was changed: "
+                    f"existing canonical root {existing_root} has a different "
+                    f"content hash than the incoming resource {expected_root}. "
+                    f"Use explicit versioned replacement to ingest revised content."
+                )
+
         # Build provenance metadata.  The source hash (when supplied by the
         # caller) is embedded in the ``args`` payload so every resource carries
         # its own audit trail regardless of the manifest.
@@ -414,6 +477,23 @@ class CornellOpenVikingBackend:
         unique: dict[str, dict[str, Any]] = {item["uri"]: item for item in files}
         self._resource_files_cache = list(unique.values())
         return self._resource_files_cache
+
+    def _logical_source_index(self) -> dict[str, str]:
+        """Build a logical-source-key → URI index from cached resources.
+
+        Returns a dict mapping each logical source key to the canonical root
+        of the first resource found.  Empty dict when the cache is cold or
+        unreachable (tests with fake clients that don't implement ``ls``).
+        """
+        index: dict[str, str] = {}
+        for item in self._resource_files():
+            uri = str(item.get("uri", ""))
+            if not uri:
+                continue
+            key = _logical_source_key(uri)
+            if key not in index:
+                index[key] = canonical_resource_root(uri)
+        return index
 
     def resolve_uri(self, uri: str) -> str | None:
         """Resolve stale filename-only search URIs to a canonical readable child URI."""
@@ -584,7 +664,7 @@ def _ignored_path(path: Path, root: Path) -> bool:
     name = path.name.lower()
     if name.startswith(("test_", "test-")) or name in {"test.m4a", "test.txt"}:
         return True
-    return name in RAW_BOOK_FILENAMES
+    return False
 
 
 def is_approved_cornell_path(path: str | Path, root: str | Path) -> bool:
@@ -603,12 +683,6 @@ def is_approved_cornell_path(path: str | Path, root: str | Path) -> bool:
         return False
     if relative.as_posix() in CURATED_SOURCE_PATHS:
         return True
-    if (
-        relative.parts[:2] == CURATED_DERIVED_ROOT.parts
-        and candidate.suffix.lower() in CURATED_DERIVED_EXTENSIONS
-        and not (set(relative.parts) & CURATED_DERIVED_EXCLUDED_PARTS)
-    ):
-        return True
     return False
 
 
@@ -624,13 +698,14 @@ __all__ = [
     "AudioSourceRejected",
     "IndexedResource",
     "SUPPORTED_EXTENSIONS",
-    "RAW_BOOK_FILENAMES",
     "CURATED_SOURCE_PATHS",
-    "CURATED_DERIVED_ROOT",
+    "SourceHashMismatch",
     "is_approved_cornell_path",
     "UnsupportedSource",
     "is_audio_path",
     "resource_uri",
     "validate_source_path",
+    "_logical_source_key",
+    "_logical_source_stem",
     "_provenance_args",
 ]

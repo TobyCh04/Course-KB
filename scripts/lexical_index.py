@@ -26,7 +26,6 @@ from rank_bm25 import BM25Okapi, BM25Plus
 try:
     from .openviking_backend import (
         CORNELL_NAMESPACE,
-        CURATED_DERIVED_ROOT,
         CURATED_SOURCE_PATHS,
         is_approved_cornell_path,
         metadata_matches,
@@ -36,7 +35,6 @@ try:
 except ImportError:  # pragma: no cover - exercised by direct CLI use
     from openviking_backend import (
         CORNELL_NAMESPACE,
-        CURATED_DERIVED_ROOT,
         CURATED_SOURCE_PATHS,
         is_approved_cornell_path,
         metadata_matches,
@@ -232,16 +230,6 @@ def build_lexical_index(
         path = root / relative
         if path.is_file():
             approved_paths.append(path)
-
-    # Add derived files under books/lean-implementation; validate against the
-    # Cornell KB root so relative paths match the OpenViking namespace.
-    derived_root = root / CURATED_DERIVED_ROOT
-    if derived_root.is_dir():
-        for path in sorted(derived_root.rglob("*")):
-            if not path.is_file():
-                continue
-            if is_approved_cornell_path(path, root):
-                approved_paths.append(path)
 
     # Caller-supplied extra files.
     if extra_files:
