@@ -8,7 +8,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def test_normalize_assessment_items_adds_assessment_scope_and_preserves_solution_fields():
-    from scripts.assessment_processor import normalize_assessment_items
+    from scripts.study.assessment_processor import normalize_assessment_items
 
     items = normalize_assessment_items([
         {
@@ -32,7 +32,7 @@ def test_normalize_assessment_items_adds_assessment_scope_and_preserves_solution
 
 
 def test_process_assessment_json_dry_run_returns_hindsight_ready_facts(tmp_path):
-    from scripts.assessment_processor import process_assessment
+    from scripts.study.assessment_processor import process_assessment
 
     source = tmp_path / "hw.json"
     source.write_text(json.dumps({"items": [
@@ -50,7 +50,7 @@ def test_process_assessment_json_dry_run_returns_hindsight_ready_facts(tmp_path)
 
 
 def test_process_assessment_rejects_non_assessment_source_type(tmp_path):
-    from scripts.assessment_processor import process_assessment
+    from scripts.study.assessment_processor import process_assessment
 
     source = tmp_path / "lecture.json"
     source.write_text(json.dumps({"items": []}), encoding="utf-8")

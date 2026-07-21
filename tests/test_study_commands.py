@@ -14,7 +14,7 @@ def facts():
 
 
 def test_quiz_builds_deterministic_problem_prompts_without_inline_answers():
-    from scripts.study_commands import build_quiz
+    from scripts.study.study_commands import build_quiz
 
     result = build_quiz(facts(), count=2, seed=7)
 
@@ -27,7 +27,7 @@ def test_quiz_builds_deterministic_problem_prompts_without_inline_answers():
 
 
 def test_llm_quiz_generates_new_variants_with_injected_callable():
-    from scripts.study_commands import build_llm_quiz
+    from scripts.study.study_commands import build_llm_quiz
 
     seen = []
     def fake_llm(prompt):
@@ -42,7 +42,7 @@ def test_llm_quiz_generates_new_variants_with_injected_callable():
 
 
 def test_quiz_uses_problem_statement_for_assessment_facts():
-    from scripts.study_commands import build_quiz
+    from scripts.study.study_commands import build_quiz
 
     result = build_quiz([{
         "name": "HW1 Problem 1",
@@ -56,7 +56,7 @@ def test_quiz_uses_problem_statement_for_assessment_facts():
 
 
 def test_review_groups_assessment_facts_by_assignment_and_type():
-    from scripts.study_commands import build_review
+    from scripts.study.study_commands import build_review
 
     result = build_review([{
         "name": "HW1 Problem 1",
@@ -72,7 +72,7 @@ def test_review_groups_assessment_facts_by_assignment_and_type():
 
 
 def test_review_groups_facts_by_topic_and_type():
-    from scripts.study_commands import build_review
+    from scripts.study.study_commands import build_review
 
     result = build_review(facts())
 
@@ -82,7 +82,7 @@ def test_review_groups_facts_by_topic_and_type():
 
 
 def test_explain_returns_requested_fact_with_related_context():
-    from scripts.study_commands import explain_fact
+    from scripts.study.study_commands import explain_fact
 
     result = explain_fact(facts(), "closed-loop")
 
@@ -92,7 +92,7 @@ def test_explain_returns_requested_fact_with_related_context():
 
 
 def test_explain_missing_fact_is_explicit():
-    from scripts.study_commands import explain_fact
+    from scripts.study.study_commands import explain_fact
 
     result = explain_fact(facts(), "nonexistent")
 

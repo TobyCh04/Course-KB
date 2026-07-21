@@ -7,7 +7,7 @@ if str(ROOT) not in sys.path:
 
 
 def test_active_model_uses_existing_openai_compatible_client():
-    from scripts.active_model import call_active_model
+    from scripts.core.active_model import call_active_model
 
     class Message:
         content = '[{"prompt":"new","answer_outline":"answer"}]'
@@ -29,7 +29,7 @@ def test_active_model_uses_existing_openai_compatible_client():
 
 
 def test_active_model_fails_explicitly_without_client():
-    from scripts.active_model import call_active_model
+    from scripts.core.active_model import call_active_model
     try:
         call_active_model(object(), "make a quiz")
     except RuntimeError as exc:

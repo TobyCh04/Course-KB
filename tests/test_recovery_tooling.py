@@ -14,9 +14,7 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
-
-from openviking_backend import CORNELL_NAMESPACE, canonical_resource_root
+from scripts.core.openviking_backend import CORNELL_NAMESPACE, canonical_resource_root
 
 
 # ---------------------------------------------------------------------------
@@ -26,7 +24,7 @@ from openviking_backend import CORNELL_NAMESPACE, canonical_resource_root
 
 class TestIngestionLogger:
     def test_record_writes_jsonl_line(self):
-        from ingestion_logger import IngestionLogger
+        from scripts.ingestion.ingestion_logger import IngestionLogger
         with tempfile.TemporaryDirectory() as td:
             log_path = Path(td) / "test.jsonl"
             log = IngestionLogger(log_path)
@@ -39,7 +37,7 @@ class TestIngestionLogger:
             assert '"status": "indexed"' in content
 
     def test_summary_counts_correctly(self):
-        from ingestion_logger import IngestionLogger
+        from scripts.ingestion.ingestion_logger import IngestionLogger
         with tempfile.TemporaryDirectory() as td:
             log_path = Path(td) / "test.jsonl"
             log = IngestionLogger(log_path)
@@ -57,7 +55,7 @@ class TestIngestionLogger:
             assert s["error_count"] == 1
 
     def test_record_indexed_convenience(self):
-        from ingestion_logger import IngestionLogger
+        from scripts.ingestion.ingestion_logger import IngestionLogger
         with tempfile.TemporaryDirectory() as td:
             log_path = Path(td) / "test.jsonl"
             log = IngestionLogger(log_path)
@@ -78,7 +76,7 @@ class TestIngestionLogger:
             assert '"status": "indexed"' in content
 
     def test_record_skipped_convenience(self):
-        from ingestion_logger import IngestionLogger
+        from scripts.ingestion.ingestion_logger import IngestionLogger
         with tempfile.TemporaryDirectory() as td:
             log_path = Path(td) / "test.jsonl"
             with IngestionLogger(log_path) as log:
@@ -86,7 +84,7 @@ class TestIngestionLogger:
             assert log.summary()["entries"]["skipped"] == 1
 
     def test_record_rejects_invalid_status(self):
-        from ingestion_logger import IngestionLogger
+        from scripts.ingestion.ingestion_logger import IngestionLogger
         with tempfile.TemporaryDirectory() as td:
             log = IngestionLogger(Path(td) / "test.jsonl")
             with pytest.raises(ValueError, match="Invalid status"):
@@ -94,7 +92,7 @@ class TestIngestionLogger:
             log.close()
 
     def test_context_manager_closes_handle(self):
-        from ingestion_logger import IngestionLogger
+        from scripts.ingestion.ingestion_logger import IngestionLogger
         with tempfile.TemporaryDirectory() as td:
             log_path = Path(td) / "test.jsonl"
             with IngestionLogger(log_path) as log:
@@ -110,7 +108,7 @@ class TestIngestionLogger:
 
 class TestCheckpointResume:
     def test_read_logged_uris_extracts_indexed_only(self):
-        from ingestion_logger import read_logged_uris
+        from scripts.ingestion.ingestion_logger import read_logged_uris
         with tempfile.TemporaryDirectory() as td:
             log_path = Path(td) / "test.jsonl"
             log_path.write_text(
@@ -124,11 +122,11 @@ class TestCheckpointResume:
             assert uris == {"viking://a", "viking://c"}
 
     def test_read_logged_uris_missing_file_returns_empty(self):
-        from ingestion_logger import read_logged_uris
+        from scripts.ingestion.ingestion_logger import read_logged_uris
         assert read_logged_uris("/nonexistent/log.jsonl") == set()
 
     def test_build_resume_manifest_filters_out_logged(self):
-        from ingestion_logger import build_resume_manifest
+        from scripts.ingestion.ingestion_logger import build_resume_manifest
         with tempfile.TemporaryDirectory() as td:
             td_path = Path(td)
             # Create a source file.
@@ -175,7 +173,7 @@ class TestCheckpointResume:
 
 class TestResourceInventory:
     def test_snapshot_with_fake_client(self):
-        from resource_inventory import snapshot, Inventory
+        from scripts.ops.resource_inventory import snapshot, Inventory
 
         class FakeClient:
             def ls(self, uri, **kwargs):
@@ -191,7 +189,7 @@ class TestResourceInventory:
         assert inv.namespace == CORNELL_NAMESPACE
 
     def test_snapshot_skips_dirs(self):
-        from resource_inventory import snapshot
+        from scripts.ops.resource_inventory import snapshot
 
         class FakeClient:
             def ls(self, uri, **kwargs):
@@ -205,7 +203,7 @@ class TestResourceInventory:
         assert inv.resource_count == 1
 
     def test_diff_computes_correctly(self):
-        from resource_inventory import (
+        from scripts.ops.resource_inventory import (
             Inventory, ResourceEntry, diff, InventoryDiff,
         )
 
@@ -234,7 +232,7 @@ class TestResourceInventory:
         assert d.unchanged == 1
 
     def test_diff_no_change(self):
-        from resource_inventory import Inventory, ResourceEntry, diff
+        from scripts.ops.resource_inventory import Inventory, ResourceEntry, diff
 
         inv = Inventory(
             namespace=CORNELL_NAMESPACE, timestamp="t", resource_count=1,
@@ -246,7 +244,7 @@ class TestResourceInventory:
         assert d.net_change == 0
 
     def test_save_and_load_inventory_roundtrip(self):
-        from resource_inventory import (
+        from scripts.ops.resource_inventory import (
             Inventory, ResourceEntry, save_inventory, load_inventory,
         )
         with tempfile.TemporaryDirectory() as td:
@@ -274,7 +272,7 @@ class TestResourceInventory:
 
 class TestCleanup:
     def test_run_cleanup_dry_run_finds_resources(self):
-        from test_cleanup import run_cleanup, CleanupReport
+        from scripts.ops.test_cleanup import run_cleanup, CleanupReport
 
         class FakeCleanupClient:
             def rm(self, uri, **kwargs):
@@ -293,7 +291,7 @@ class TestCleanup:
         assert report.failed == 0
 
     def test_run_cleanup_live_removes(self):
-        from test_cleanup import run_cleanup
+        from scripts.ops.test_cleanup import run_cleanup
 
         removed = []
 
@@ -311,7 +309,7 @@ class TestCleanup:
         assert len(removed) == 1
 
     def test_cleanup_with_explicit_uris(self):
-        from test_cleanup import run_cleanup
+        from scripts.ops.test_cleanup import run_cleanup
 
         class FakeCleanupClient:
             def rm(self, uri, **kwargs):
@@ -328,14 +326,14 @@ class TestCleanup:
         assert report.total_found == 2
 
     def test_cleanup_hindsight_bank_dry_run(self):
-        from test_cleanup import cleanup_hindsight_bank
+        from scripts.ops.test_cleanup import cleanup_hindsight_bank
 
         result = cleanup_hindsight_bank(None, "test-bank", dry_run=True)
         assert result["dry_run"] is True
         assert result["removed"] is False
 
     def test_cleanup_hindsight_bank_live(self):
-        from test_cleanup import cleanup_hindsight_bank
+        from scripts.ops.test_cleanup import cleanup_hindsight_bank
 
         class FakeHS:
             def delete_bank(self, bank):
@@ -347,7 +345,7 @@ class TestCleanup:
         assert result["error"] is None
 
     def test_cleanup_hindsight_bank_live_error(self):
-        from test_cleanup import cleanup_hindsight_bank
+        from scripts.ops.test_cleanup import cleanup_hindsight_bank
 
         class FailingHS:
             def delete_bank(self, bank):

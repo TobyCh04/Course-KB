@@ -9,7 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def test_chunk_transcript_bounds_concurrency_preserves_order_and_resumes(tmp_path):
-    from scripts.chunker import chunk_transcript
+    from scripts.notes.chunker import chunk_transcript
 
     transcript = tmp_path / "lecture.txt"
     transcript.write_text(

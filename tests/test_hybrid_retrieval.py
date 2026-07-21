@@ -14,10 +14,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
-from scripts import hybrid_retrieval as hr
-from scripts.lexical_index import LexicalIndex, save_index
-from scripts.search import cmd_hybrid, cmd_hybrid_trace
+from scripts.core.openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
+from scripts.retrieval import hybrid_retrieval as hr
+from scripts.retrieval.lexical_index import LexicalIndex, save_index
+from scripts.retrieval.search import cmd_hybrid, cmd_hybrid_trace
 
 
 class FakeSearchClient:

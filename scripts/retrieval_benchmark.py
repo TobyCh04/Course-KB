@@ -6,7 +6,7 @@ than treating short retrieval abstracts as the answer context.
 """
 
 from __future__ import annotations
-
+import sys
 import argparse
 import json
 import statistics
@@ -14,15 +14,22 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+import sys as _sys
+from pathlib import Path as _Path
+_sys_root = _Path(__file__).resolve().parents[2]
+if str(_sys_root) not in _sys.path:
+    _sys.path.insert(0, str(_sys_root))
+
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.openviking_backend import CornellOpenVikingBackend
-from scripts.query_orchestrator import execute_planned_query
-from scripts.query_planner import QueryPlanner
+from scripts.core.openviking_backend import CornellOpenVikingBackend
+from scripts.retrieval.query_orchestrator import execute_planned_query
+from scripts.retrieval.query_planner import QueryPlanner
 
 DEFAULT_CONFIG = Path("retrieval_benchmark.json")
 DEFAULT_INDEX = Path("data/lexical_index.json")

@@ -10,7 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def test_json_http_client_retries_transient_failure_with_exponential_backoff():
-    from scripts.common_client import JsonHttpClient, TransientHttpError
+    from scripts.core.common_client import JsonHttpClient, TransientHttpError
 
     attempts = []
     delays = []

@@ -13,8 +13,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
-from scripts.search import cmd_search, cmd_source, cmd_trace, cmd_health
+from scripts.core.openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
+from scripts.retrieval.search import cmd_search, cmd_source, cmd_trace, cmd_health
 
 
 class FakeSearchClient:
@@ -139,7 +139,7 @@ def test_direct_search_script_help_entrypoint_runs():
     import subprocess
 
     completed = subprocess.run(
-        [sys.executable, str(PROJECT_ROOT / "scripts" / "search.py"), "--help"],
+        [sys.executable, str(PROJECT_ROOT / "scripts" / "retrieval" / "search.py"), "--help"],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,

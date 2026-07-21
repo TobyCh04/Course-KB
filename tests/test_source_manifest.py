@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.source_manifest import (  # noqa: E402
+from scripts.ingestion.source_manifest import (  # noqa: E402
     build_lexical_index_from_manifest,
     dry_run_manifest,
     validate_manifest,
@@ -98,7 +98,7 @@ def test_manifest_canonical_root_changes_with_authoritative_source_hash(tmp_path
     canonical root.  This is the manifest-level identity safety guarantee:
     a stale URI can never alias changed content.
     """
-    from scripts.source_manifest import manifest_canonical_roots
+    from scripts.ingestion.source_manifest import manifest_canonical_roots
 
     pdf = tmp_path / "homework.pdf"
 
@@ -131,7 +131,7 @@ def test_manifest_identical_hash_yields_same_canonical_root(tmp_path):
     This preserves deterministic idempotency: re-running manifest validation or
     ingestion for unchanged content must address the same canonical root.
     """
-    from scripts.source_manifest import manifest_canonical_roots
+    from scripts.ingestion.source_manifest import manifest_canonical_roots
 
     pdf = tmp_path / "homework.pdf"
     pdf.write_bytes(b"stable content")

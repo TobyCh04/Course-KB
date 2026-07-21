@@ -11,11 +11,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.openviking_backend import CORNELL_NAMESPACE, CornellOpenVikingBackend
-from scripts.query_models import QueryPlan
-from scripts.query_orchestrator import execute_planned_query
-from scripts.query_planner import QueryPlanner
-from scripts.search import cmd_planned_hybrid
+from scripts.core.openviking_backend import CORNELL_NAMESPACE, CornellOpenVikingBackend
+from scripts.retrieval.query_models import QueryPlan
+from scripts.retrieval.query_orchestrator import execute_planned_query
+from scripts.retrieval.query_planner import QueryPlanner
+from scripts.retrieval.search import cmd_planned_hybrid
 
 
 def _response(**overrides):

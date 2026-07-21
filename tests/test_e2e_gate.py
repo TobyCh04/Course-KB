@@ -14,10 +14,9 @@ from pathlib import Path
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 sys.path.insert(0, str(PROJECT_ROOT / "test_runs"))
 
-from openviking_backend import (
+from scripts.core.openviking_backend import (
     CORNELL_NAMESPACE,
     CornellOpenVikingBackend,
     SourceHashMismatch,

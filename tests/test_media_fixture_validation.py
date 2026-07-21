@@ -17,9 +17,7 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
-
-from media_artifact import (
+from scripts.ingestion.media_artifact import (
     EXTRACTION_ENGINES,
     ArtifactRecord,
     make_artifact,
@@ -112,7 +110,7 @@ def test_make_artifact_accepts_all_valid_engines():
 
 def test_make_artifact_accepts_all_valid_statuses():
     """Every downstream status must be accepted."""
-    from media_artifact import DOWNSTREAM_STATUSES
+    from scripts.ingestion.media_artifact import DOWNSTREAM_STATUSES
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         source = root / "test.txt"
@@ -208,7 +206,7 @@ def test_artifact_record_to_dict_omits_none_course_lecture():
 # Individual fixture tests
 # ---------------------------------------------------------------------------
 
-from media_fixture_validation import (
+from scripts.media.media_fixture_validation import (
     _SILENT_WAV,
     _PNG_1X1,
     _MINIMAL_PDF,

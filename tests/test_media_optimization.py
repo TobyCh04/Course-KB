@@ -16,9 +16,9 @@ SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-import diagrams  # noqa: E402
-import transcribe  # noqa: E402
-import model_availability  # noqa: E402
+from scripts.media import diagrams  # noqa: E402
+from scripts.media import transcribe  # noqa: E402
+from scripts.core import model_availability  # noqa: E402
 
 
 # A valid transparent 1x1 PNG; tests never need Pillow, GPU models, or Ollama.

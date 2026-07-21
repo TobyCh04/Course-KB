@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.openviking_backend import (  # noqa: E402
+from scripts.core.openviking_backend import (  # noqa: E402
     CORNELL_NAMESPACE,
     AudioSourceRejected,
     CornellOpenVikingBackend,
@@ -286,7 +286,7 @@ def test_namespace_prefix_collision_is_rejected():
 
 
 def test_provenance_args_includes_processor_version():
-    from scripts.openviking_backend import _provenance_args
+    from scripts.core.openviking_backend import _provenance_args
 
     args = _provenance_args(source_type="homework", course="TEST", source_hash="a" * 64)
 
@@ -298,7 +298,7 @@ def test_provenance_args_includes_processor_version():
 
 
 def test_provenance_args_includes_optional_metadata():
-    from scripts.openviking_backend import _provenance_args
+    from scripts.core.openviking_backend import _provenance_args
 
     args = _provenance_args(
         {"semester": "FA26", "date": "2026-09-01", "corpus": "test"},
@@ -342,7 +342,7 @@ def test_index_file_passes_source_hash_to_provenance(tmp_path):
 
 
 def test_provenance_args_omits_audio_keys():
-    from scripts.openviking_backend import _provenance_args
+    from scripts.core.openviking_backend import _provenance_args
 
     args = _provenance_args(
         {"audio_path": "/tmp/lecture.m4a"},
@@ -459,7 +459,7 @@ def test_load_manifest_metadata_skips_malformed_hash_without_crashing(tmp_path):
         good, course="TEST", source_type="homework", root=tmp_path,
         source_hash=good_hash,
     )
-    from scripts.openviking_backend import canonical_resource_root
+    from scripts.core.openviking_backend import canonical_resource_root
 
     assert canonical_resource_root(good_uri) in backend._manifest_metadata
     assert len(backend._manifest_metadata) == 1
@@ -471,7 +471,7 @@ def test_load_manifest_metadata_skips_malformed_hash_without_crashing(tmp_path):
 
 
 def test_logical_source_stem_strips_digest():
-    from scripts.openviking_backend import _logical_source_stem
+    from scripts.core.openviking_backend import _logical_source_stem
 
     assert _logical_source_stem("lecture-01-a1b2c3d4e5f6") == "lecture-01"
     assert _logical_source_stem("homework_1-0123456789ab") == "homework_1"
@@ -482,7 +482,7 @@ def test_logical_source_stem_strips_digest():
 
 
 def test_logical_source_key_matches_same_source_different_hash(tmp_path):
-    from scripts.openviking_backend import _logical_source_key, resource_uri
+    from scripts.core.openviking_backend import _logical_source_key, resource_uri
 
     source = tmp_path / "lecture.txt"
     source.write_text("content v1", encoding="utf-8")
@@ -502,7 +502,7 @@ def test_logical_source_key_matches_same_source_different_hash(tmp_path):
 
 def test_index_file_raises_mismatch_when_same_logical_source_different_hash(tmp_path):
     """Strict rejection: same logical source + different hash → SourceHashMismatch."""
-    from scripts.openviking_backend import SourceHashMismatch, resource_uri
+    from scripts.core.openviking_backend import SourceHashMismatch, resource_uri
 
     source = tmp_path / "homework.txt"
     source.write_text("original submission", encoding="utf-8")
@@ -539,7 +539,7 @@ def test_index_file_raises_mismatch_when_same_logical_source_different_hash(tmp_
 
 def test_index_file_is_idempotent_when_same_logical_source_same_hash(tmp_path):
     """Same logical source + same hash → idempotent skip, no add_resource call."""
-    from scripts.openviking_backend import resource_uri
+    from scripts.core.openviking_backend import resource_uri
 
     source = tmp_path / "homework.txt"
     source.write_text("stable content", encoding="utf-8")

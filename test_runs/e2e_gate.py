@@ -21,7 +21,13 @@ All live interactions are injectable so the offline test suite never
 contacts paid providers or mutates production workspaces.
 """
 
+
 from __future__ import annotations
+import sys as _sys
+from pathlib import Path as _Path
+_sys_root = _Path(__file__).resolve().parents[2]
+if str(_sys_root) not in _sys.path:
+    _sys.path.insert(0, str(_sys_root))
 
 import argparse
 import hashlib
@@ -49,11 +55,11 @@ def _import(name: str) -> Any:
 
 
 # Local imports
-sv_backend = _import("openviking_backend")
-sv_manifest = _import("source_manifest")
+sv_backend = _import("scripts.core.openviking_backend")
+sv_manifest = _import("scripts.ingestion.source_manifest")
 sv_preflight_mod = None
 try:
-    sv_preflight_mod = _import("preflight")
+    sv_preflight_mod = _import("scripts.ingestion.preflight")
 except (ImportError, ModuleNotFoundError):
     pass
 

@@ -25,9 +25,6 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
-
-
 # ---------------------------------------------------------------------------
 # Synthetic test data (mirrors what a real Cornell student would see)
 # ---------------------------------------------------------------------------
@@ -93,7 +90,7 @@ class TestSourceGroundedAnswers:
     """Search + source read-back = source-grounded answer."""
 
     def test_search_returns_uris_in_cornell_namespace(self):
-        from openviking_backend import CORNELL_NAMESPACE
+        from scripts.core.openviking_backend import CORNELL_NAMESPACE
 
         class FakeClient:
             def search(self, **kwargs):
@@ -108,8 +105,8 @@ class TestSourceGroundedAnswers:
             def add_resource(self, **kw):
                 return {"status": "completed"}
 
-        from openviking_backend import CornellOpenVikingBackend
-        from search import cmd_search
+        from scripts.core.openviking_backend import CornellOpenVikingBackend
+        from scripts.retrieval.search import cmd_search
 
         backend = CornellOpenVikingBackend(FakeClient())
         result = cmd_search(backend, "transfer function", limit=5)
@@ -119,7 +116,7 @@ class TestSourceGroundedAnswers:
             assert r["uri"].startswith(CORNELL_NAMESPACE + "/")
 
     def test_source_readback_returns_content(self):
-        from openviking_backend import CORNELL_NAMESPACE
+        from scripts.core.openviking_backend import CORNELL_NAMESPACE
 
         class FakeClient:
             def search(self, **kw):
@@ -129,8 +126,8 @@ class TestSourceGroundedAnswers:
             def read(self, uri, **kw):
                 return "The closed-loop transfer function is T(s) = G(s)/(1+G(s)H(s))."
 
-        from openviking_backend import CornellOpenVikingBackend
-        from search import cmd_source
+        from scripts.core.openviking_backend import CornellOpenVikingBackend
+        from scripts.retrieval.search import cmd_source
 
         backend = CornellOpenVikingBackend(FakeClient())
         uri = f"{CORNELL_NAMESPACE}/TEST/course/ch1"
@@ -140,7 +137,7 @@ class TestSourceGroundedAnswers:
         assert "T(s)" in result["content"]
 
     def test_trace_combines_search_and_read(self):
-        from openviking_backend import CORNELL_NAMESPACE
+        from scripts.core.openviking_backend import CORNELL_NAMESPACE
 
         class FakeClient:
             def search(self, **kw):
@@ -155,8 +152,8 @@ class TestSourceGroundedAnswers:
             def read(self, uri, **kw):
                 return "source content"
 
-        from openviking_backend import CornellOpenVikingBackend
-        from search import cmd_trace
+        from scripts.core.openviking_backend import CornellOpenVikingBackend
+        from scripts.retrieval.search import cmd_trace
 
         backend = CornellOpenVikingBackend(FakeClient())
         result = cmd_trace(backend, "stability", limit=3)
@@ -175,7 +172,7 @@ class TestLectureExplanations:
     """explain_fact returns fact + related context."""
 
     def test_explain_finds_matching_fact(self):
-        from study_commands import explain_fact
+        from scripts.study.study_commands import explain_fact
 
         result = explain_fact(_course_facts(), "closed-loop")
 
@@ -184,7 +181,7 @@ class TestLectureExplanations:
         assert "feedback" in result["fact"]["definition"].lower()
 
     def test_explain_returns_related_facts(self):
-        from study_commands import explain_fact
+        from scripts.study.study_commands import explain_fact
 
         result = explain_fact(_course_facts(), "closed-loop")
 
@@ -192,7 +189,7 @@ class TestLectureExplanations:
         assert result["found"] is True
 
     def test_explain_missing_is_explicit(self):
-        from study_commands import explain_fact
+        from scripts.study.study_commands import explain_fact
 
         result = explain_fact(_course_facts(), "quantum field theory")
 
@@ -210,7 +207,7 @@ class TestQuizGeneration:
     """Quiz questions must not leak answers."""
 
     def test_quiz_questions_have_no_answer_key(self):
-        from study_commands import build_quiz
+        from scripts.study.study_commands import build_quiz
 
         result = build_quiz(_course_facts(), count=3, seed=42)
 
@@ -220,7 +217,7 @@ class TestQuizGeneration:
             assert "answer" not in q, f"question leaks answer: {q}"
 
     def test_quiz_separate_answer_key(self):
-        from study_commands import build_quiz
+        from scripts.study.study_commands import build_quiz
 
         result = build_quiz(_course_facts(), count=3, seed=42)
 
@@ -230,7 +227,7 @@ class TestQuizGeneration:
         assert result["questions"] != result["answer_key"]
 
     def test_quiz_deterministic_with_seed(self):
-        from study_commands import build_quiz
+        from scripts.study.study_commands import build_quiz
 
         a = build_quiz(_course_facts(), count=2, seed=7)
         b = build_quiz(_course_facts(), count=2, seed=7)
@@ -239,7 +236,7 @@ class TestQuizGeneration:
         assert a["answer_key"] == b["answer_key"]
 
     def test_quiz_handles_empty_facts(self):
-        from study_commands import build_quiz
+        from scripts.study.study_commands import build_quiz
 
         result = build_quiz([], count=5)
 
@@ -257,7 +254,7 @@ class TestHomeworkProblems:
     """Practice variants must NOT copy original wording."""
 
     def test_assessment_facts_get_practice_variant_prompt(self):
-        from study_commands import build_quiz
+        from scripts.study.study_commands import build_quiz
 
         result = build_quiz(_course_facts(), count=5, seed=1)
 
@@ -274,7 +271,7 @@ class TestHomeworkProblems:
             )
 
     def test_llm_quiz_generates_new_variants(self):
-        from study_commands import build_llm_quiz
+        from scripts.study.study_commands import build_llm_quiz
 
         calls = []
 
@@ -307,7 +304,7 @@ class TestSeparateAnswerKeys:
     """Answer keys must be structurally separate from question prompts."""
 
     def test_answer_key_never_contains_prompt_field(self):
-        from study_commands import build_quiz
+        from scripts.study.study_commands import build_quiz
 
         result = build_quiz(_course_facts(), count=5, seed=99)
 
@@ -316,7 +313,7 @@ class TestSeparateAnswerKeys:
             assert "answer" in ak
 
     def test_answer_key_ids_match_question_ids(self):
-        from study_commands import build_quiz
+        from scripts.study.study_commands import build_quiz
 
         result = build_quiz(_course_facts(), count=3, seed=7)
 
@@ -340,8 +337,8 @@ class TestEmptyRetrieval:
             def add_resource(self, **kw):
                 return {"status": "completed"}
 
-        from openviking_backend import CornellOpenVikingBackend
-        from search import cmd_search
+        from scripts.core.openviking_backend import CornellOpenVikingBackend
+        from scripts.retrieval.search import cmd_search
 
         backend = CornellOpenVikingBackend(EmptyClient())
         result = cmd_search(backend, "this topic does not exist", limit=5)
@@ -358,8 +355,8 @@ class TestEmptyRetrieval:
             def read(self, uri, **kw):
                 raise RuntimeError("should not be called")
 
-        from openviking_backend import CornellOpenVikingBackend
-        from search import cmd_trace
+        from scripts.core.openviking_backend import CornellOpenVikingBackend
+        from scripts.retrieval.search import cmd_trace
 
         backend = CornellOpenVikingBackend(EmptyClient())
         result = cmd_trace(backend, "nonexistent", limit=5)
@@ -368,14 +365,14 @@ class TestEmptyRetrieval:
         assert "top_source" not in result
 
     def test_explain_empty_facts_returns_not_found(self):
-        from study_commands import explain_fact
+        from scripts.study.study_commands import explain_fact
 
         result = explain_fact([], "anything")
 
         assert result["found"] is False
 
     def test_review_empty_facts_returns_zero_totals(self):
-        from study_commands import build_review
+        from scripts.study.study_commands import build_review
 
         result = build_review([])
 
@@ -392,7 +389,7 @@ class TestScopeSelection:
     """assessment vs course scope must be correctly routed."""
 
     def test_source_scope_filters_course_and_assessment(self):
-        from openviking_backend import metadata_matches
+        from scripts.core.openviking_backend import metadata_matches
 
         # Course scope: accepts lectures, transcripts; rejects homework, exams.
         assert metadata_matches({"source_type": "lecture"}, {"source_scope": "course"})
@@ -410,7 +407,7 @@ class TestScopeSelection:
         assert metadata_matches({"source_type": "homework"}, {"source_scope": "all"})
 
     def test_review_groups_by_scope(self):
-        from study_commands import build_review
+        from scripts.study.study_commands import build_review
 
         result = build_review(_course_facts())
 
@@ -420,7 +417,7 @@ class TestScopeSelection:
         assert result["by_scope"].get("course", 0) >= 3  # concepts
 
     def test_review_groups_by_assignment(self):
-        from study_commands import build_review
+        from scripts.study.study_commands import build_review
 
         result = build_review(_course_facts())
 
@@ -428,7 +425,7 @@ class TestScopeSelection:
         assert result["by_assignment"].get("HW1", 0) == 2
 
     def test_assessment_processor_adds_scope(self):
-        from assessment_processor import normalize_assessment_items
+        from scripts.study.assessment_processor import normalize_assessment_items
 
         items = normalize_assessment_items(
             [{"problem": "Derive X", "solution_pattern": "Method Y"}],
@@ -443,7 +440,7 @@ class TestScopeSelection:
 
     def test_assessment_items_not_mistaken_for_course(self):
         """An assessment item should never pass a course-scope filter."""
-        from openviking_backend import metadata_matches
+        from scripts.core.openviking_backend import metadata_matches
 
         hw_metadata = {
             "source_type": "homework",
@@ -459,7 +456,7 @@ class TestScopeSelection:
 
     def test_search_filters_by_scope(self):
         """When a search is scoped to 'course', assessment items are filtered out."""
-        from openviking_backend import CORNELL_NAMESPACE
+        from scripts.core.openviking_backend import CORNELL_NAMESPACE
 
         class ScopeFilterClient:
             def search(self, **kw):
@@ -475,7 +472,7 @@ class TestScopeSelection:
             def add_resource(self, **kw):
                 return {"status": "completed"}
 
-        from openviking_backend import CornellOpenVikingBackend
+        from scripts.core.openviking_backend import CornellOpenVikingBackend
 
         backend = CornellOpenVikingBackend(ScopeFilterClient())
 
@@ -488,7 +485,7 @@ class TestScopeSelection:
     def test_review_quiz_scope_boundary(self):
         """A quiz generated from all facts should include both course and assessment,
         but assessment questions get practice-variant framing."""
-        from study_commands import build_quiz
+        from scripts.study.study_commands import build_quiz
 
         result = build_quiz(_course_facts(), count=5, seed=1)
 
@@ -512,7 +509,7 @@ class TestStudentWorkflowE2E:
     def test_full_study_session(self):
         """A student can search for a topic, get an explanation, generate
         a quiz, and review their progress — all with fake backends."""
-        from openviking_backend import CORNELL_NAMESPACE
+        from scripts.core.openviking_backend import CORNELL_NAMESPACE
 
         # Set up a fake search backend that returns course facts.
         class StudyClient:
@@ -529,8 +526,8 @@ class TestStudentWorkflowE2E:
             def read(self, uri, **kw):
                 return "A closed-loop system uses feedback to reduce error."
 
-        from openviking_backend import CornellOpenVikingBackend
-        from search import cmd_trace, cmd_search
+        from scripts.core.openviking_backend import CornellOpenVikingBackend
+        from scripts.retrieval.search import cmd_trace, cmd_search
 
         backend = CornellOpenVikingBackend(StudyClient())
 
@@ -545,18 +542,18 @@ class TestStudentWorkflowE2E:
         assert "closed-loop" in trace["top_source"]["content"]
 
         # Step 3: Explain a fact.
-        from study_commands import explain_fact
+        from scripts.study.study_commands import explain_fact
         explain = explain_fact(_course_facts(), "closed-loop")
         assert explain["found"] is True
 
         # Step 4: Generate a quiz.
-        from study_commands import build_quiz
+        from scripts.study.study_commands import build_quiz
         quiz = build_quiz(_course_facts(), count=3, seed=42)
         assert len(quiz["questions"]) == 3
         assert len(quiz["answer_key"]) == 3
 
         # Step 5: Review progress.
-        from study_commands import build_review
+        from scripts.study.study_commands import build_review
         review = build_review(_course_facts())
         assert review["total"] == 5
         assert "by_topic" in review
@@ -564,7 +561,7 @@ class TestStudentWorkflowE2E:
 
     def test_assessment_only_study_session(self):
         """Student studying only homework: scope=assessment, no course facts."""
-        from study_commands import build_quiz, build_review, explain_fact
+        from scripts.study.study_commands import build_quiz, build_review, explain_fact
 
         assessment_facts = [
             f for f in _course_facts()

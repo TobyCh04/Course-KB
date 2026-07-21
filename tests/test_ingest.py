@@ -20,7 +20,7 @@ def _fact(number):
 
 
 def test_ingest_facts_sends_valid_facts_in_configured_batches():
-    from scripts.ingest import ingest_facts
+    from scripts.ingestion.ingest import ingest_facts
 
     class FakeHindsightClient:
         def __init__(self):
@@ -41,7 +41,7 @@ def test_ingest_facts_sends_valid_facts_in_configured_batches():
 
 
 def test_ingest_facts_reports_only_the_failed_batch_and_continues():
-    from scripts.ingest import ingest_facts
+    from scripts.ingestion.ingest import ingest_facts
 
     class FakeHindsightClient:
         def __init__(self):
@@ -64,7 +64,7 @@ def test_ingest_facts_reports_only_the_failed_batch_and_continues():
 
 
 def test_format_fact_tags_include_namespaced_metadata():
-    from scripts.ingest import format_fact_tags
+    from scripts.ingestion.ingest import format_fact_tags
 
     tags = format_fact_tags({
         **_fact(1),
@@ -82,7 +82,7 @@ def test_format_fact_tags_include_namespaced_metadata():
 
 
 def test_hindsight_recall_translates_filters_to_strict_tag_payload():
-    from scripts.ingest import hindsight_recall
+    from scripts.ingestion.ingest import hindsight_recall
 
     class FakeHindsightClient:
         def __init__(self):
@@ -117,7 +117,7 @@ def test_hindsight_recall_translates_filters_to_strict_tag_payload():
 
 
 def test_hindsight_retain_items_blocks_production_bank_by_default():
-    from scripts.ingest import hindsight_retain_items
+    from scripts.ingestion.ingest import hindsight_retain_items
 
     with pytest.raises(ValueError, match="production bank"):
         hindsight_retain_items(
@@ -127,7 +127,7 @@ def test_hindsight_retain_items_blocks_production_bank_by_default():
 
 
 def test_hindsight_retain_items_allows_production_bank_with_flag():
-    from scripts.ingest import hindsight_retain_items
+    from scripts.ingestion.ingest import hindsight_retain_items
 
     class FakeHindsightClient:
         def post_json(self, url, payload, **kwargs):
@@ -143,7 +143,7 @@ def test_hindsight_retain_items_allows_production_bank_with_flag():
 
 
 def test_hindsight_retain_items_allows_non_production_bank():
-    from scripts.ingest import hindsight_retain_items
+    from scripts.ingestion.ingest import hindsight_retain_items
 
     class FakeHindsightClient:
         def post_json(self, url, payload, **kwargs):
@@ -158,7 +158,7 @@ def test_hindsight_retain_items_allows_non_production_bank():
 
 
 def test_ingest_facts_rejects_production_bank_by_default():
-    from scripts.ingest import ingest_facts
+    from scripts.ingestion.ingest import ingest_facts
 
     with pytest.raises(ValueError, match="production bank"):
         ingest_facts([_fact(1)], bank_id="hermes-history")
