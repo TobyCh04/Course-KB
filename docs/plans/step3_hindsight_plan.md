@@ -1,6 +1,6 @@
 # Step 3: Hindsight Integration — Detailed Plan
 
-**Status:** IMPLEMENTED with fail-closed bank isolation and structured provenance; production rollout remains gated by the isolated end-to-end validation and cleanup checklist in `STATUS.md`.
+**Status:** IMPLEMENTED with fail-closed bank isolation and structured provenance. All 7 pre-semester priorities complete. Hindsight production bank (`hermes-history`) guarded by `allow_production=True` requirement. Batch ingestion (#D3) identified as doable before school. See STATUS.md for full tracking.
 **Created:** 2026-07-13
 **Depends on:** Step 1 (Whisper/MOSS), Step 2 (pymupdf/GLM-OCR/Qwen3-VL)
 

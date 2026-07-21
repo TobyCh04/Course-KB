@@ -111,6 +111,28 @@ Naming conventions, course namespaces, Obsidian output structure.
 - Web verification/search coverage improvements.
 - Replace local media models (only if verified DeepSeek multimodal API path becomes available).
 
+## Doable before school starts (from plan files — not yet prioritized)
+
+These are items from `step6_openviking_plan.md`, `step4_note_generator_plan.md`,
+and `step3_hindsight_plan.md` that require zero real course files:
+
+| # | Item | Plan ref | What it is |
+|---|------|----------|-----------|
+| D1 | **Laptop pipeline script** | 6.2 | `laptop_pipeline.py` that runs full media→ingest pipeline end-to-end on RTX 4080. Currently each step (transcribe, OCR, index) is manual. One command: audio+PDF+diagram → OpenViking resource. Needs Tailscale connectivity verified first. |
+| D2 | **Expanded retrieval benchmark** | 6.3/6.8 | Add 15-20 more synthetic sources (formula-heavy, multi-source, ambiguous) to the current 10-query benchmark. Current benchmark saturated at 100% with bge-small — can't measure improvement without harder queries. |
+| D3 | **Batch ingestion** | 3.6.9 | Process multiple lectures/homeworks/exams at once. `ingest_manifest()` exists but no orchestration for multi-file batch runs with logging and resume. |
+| D4 | **Laptop connectivity test** | 6.2 | Verify Tailscale path from mini PC → RTX 4080 laptop (100.104.205.105) is reachable and stable for Ollama/OpenViking calls. |
+| D5 | **Embedding A/B smoke test** | 6.3 | Test bge-base-en-v1.5 against bge-small on expanded benchmark. Separate workspace, no production risk. Would tell us if upgrading is worth it before courses start. |
+
+## Gated by real course files (not doable yet)
+
+- Production course ingestion — no lectures until late August
+- Obsidian note generation from real lectures — no real transcripts
+- Reranker calibration — needs representative course material
+- Student workflow live testing — no real search queries
+- Wikilink generation in notes — needs real note-to-note relationships
+- Pipeline 6.7 (Hermes skill integration) — partially done, needs live retrieval testing
+
 ## Acceptance criteria for declaring production-ready
 
 - Strict source-hash policy implemented and live-tested. ✅

@@ -1,6 +1,6 @@
 # Step 4: Lecture Note Generator — Detailed Plan
 
-**Status:** IMPLEMENTED for text synthesis; production rollout remains gated by the Step 6 isolated end-to-end gate and real media-fixture validation.
+**Status:** IMPLEMENTED for text synthesis; all 7 pre-semester priorities complete. Note generator produces structured markdown with DeepSeek V4 Pro. Production rollout awaits real course files (late August 2026). 5 doable items identified for pre-school window: laptop pipeline, expanded benchmark, batch ingestion, connectivity test, embedding A/B test. See STATUS.md for full tracking.
 **Created:** 2026-07-13
 **Depends on:** Step 1 (Whisper/MOSS), Step 2 (GLM-OCR/pymupdf), Step 3 (Hindsight)
 
