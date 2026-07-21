@@ -43,11 +43,12 @@
 
 ## Verification
 
-- **203 tests pass** (was 161 at start of hardening milestone; 187 after Priority 1-2; +16 e2e gate tests)
+- **227 tests pass** (was 161 at start of hardening milestone; 203 after Priority 1-3; +24 media fixture tests)
 - Python compilation clean
 - `git diff --check` clean
 - Preflight: 4/4 PASS (offline), SKILL.md conflict resolved
 - E2E gate: 8/8 PASS (offline), covers first write, idempotency, hash-mismatch, provenance, read-back, Hindsight, rollback inventory, cleanup
+- Media fixtures: 6/6 PASS (offline), all 6 processors produce artifacts with source_hash, extraction_engine, ingestion_timestamp, downstream_resource_status
 
 ## Remaining pre-semester work
 
@@ -60,9 +61,16 @@ Check in a repeatable gate covering: first write, duplicate idempotency, provena
 - All gate steps pass with shared fake client; live mode wired for OpenViking + Hindsight
 - Gate is idempotent: running twice on the same workdir passes both times
 
-### Priority 4: Media-fixture validation ⬜
+### Priority 4: Media-fixture validation ✅
 
 Run isolated fixtures for Whisper/MOSS, pymupdf, GLM-OCR, Qwen3-VL/diagram extraction, and DeepSeek V4 Pro synthesis. Every artifact must carry source hash, extraction engine, timestamp, and downstream resource status.
+
+- `scripts/media_artifact.py` — `ArtifactRecord` dataclass with the four required fields + `make_artifact()` factory + `validate_artifact()` checker
+- `scripts/media_fixture_validation.py` — 6-fixture validation: whisper, moss, pymupdf, glm-ocr, qwen3-vl, deepseek-synthesis; all injectable
+- `tests/test_media_fixture_validation.py` — 24 offline tests, all pass
+- Every artifact carries: `source_hash`, `extraction_engine`, `ingestion_timestamp`, `downstream_resource_status`
+- Valid engines: whisper-large-v3-turbo, moss-0.9b, pymupdf, glm-ocr, qwen3-vl:8b, deepseek-v4-pro
+- Valid statuses: pending_openviking, indexed, pending_hindsight, complete, skipped, failed
 
 ### Priority 5: Recovery/checkpoint/cleanup tooling ⬜
 
@@ -86,9 +94,9 @@ Naming conventions, course namespaces, Obsidian output structure.
 ## Acceptance criteria for declaring production-ready
 
 - Strict source-hash policy implemented and live-tested. ✅
-- One isolated end-to-end gate passes all checks. ⬜
+- One isolated end-to-end gate passes all checks. ✅
 - Production cleanup inventory is zero-test and reversible. ⬜
 - Real course ingestion performed only from a validated manifest. ⬜
 - OpenViking and Hindsight read-back checks pass. ⬜
 - No unexpected memory-linking activity or internal token explosion. ⬜
-- Full tests, syntax checks, and retrieval/source-read checks pass. ✅ (187 tests)
+- Full tests, syntax checks, and retrieval/source-read checks pass. ✅ (227 tests)
