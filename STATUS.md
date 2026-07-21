@@ -43,16 +43,22 @@
 
 ## Verification
 
-- **187 tests pass** (was 161 at start of hardening milestone)
+- **203 tests pass** (was 161 at start of hardening milestone; 187 after Priority 1-2; +16 e2e gate tests)
 - Python compilation clean
 - `git diff --check` clean
 - Preflight: 4/4 PASS (offline), SKILL.md conflict resolved
+- E2E gate: 8/8 PASS (offline), covers first write, idempotency, hash-mismatch, provenance, read-back, Hindsight, rollback inventory, cleanup
 
 ## Remaining pre-semester work
 
-### Priority 3: Complete isolated end-to-end gate ⬜
+### Priority 3: Complete isolated end-to-end gate ✅
 
 Check in a repeatable gate covering: first write, duplicate idempotency, provenance/source read-back, strict hash mismatch behavior, no memory linking or token explosion, isolated Hindsight retain/recall, rollback inventory, and cleanup with zero test resources remaining.
+
+- `test_runs/e2e_gate.py` — repeatable gate with 8 sequential checks, injectable fakes
+- `tests/test_e2e_gate.py` — 16 offline tests covering every gate step in isolation + full gate
+- All gate steps pass with shared fake client; live mode wired for OpenViking + Hindsight
+- Gate is idempotent: running twice on the same workdir passes both times
 
 ### Priority 4: Media-fixture validation ⬜
 
