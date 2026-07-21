@@ -1,0 +1,132 @@
+# Cornell KB — Course Namespace Registry
+#
+# Authoritative mapping of Cornell course codes to OpenViking slugs and
+# Obsidian vault paths. Update this file when onboarding a new course.
+#
+# Fields:
+#   slug:          URI-safe identifier (lowercase, hyphens)
+#   openviking:    Namespace under viking://resources/cornell-kb/
+#   obsidian:      Vault path under ~/obsidian-vault/Cornell/
+#   semester:      When the course runs (FA26, SP27, etc.)
+#   status:        active | planned | archived
+
+courses:
+
+  # ── Fall 2026 ──────────────────────────────────────────────────────────
+
+  "SYSEN 5100":
+    slug: sysen-5100
+    name: "Model-Based Systems Engineering"
+    openviking: viking://resources/cornell-kb/sysen-5100
+    obsidian: "Cornell/SYSEN 5100"
+    semester: FA26
+    credits: 4
+    status: planned
+
+  "SYSEN 5930":
+    slug: sysen-5930
+    name: "Project Management and Leadership of Complex Systems"
+    openviking: viking://resources/cornell-kb/sysen-5930
+    obsidian: "Cornell/SYSEN 5930"
+    semester: FA26
+    credits: 4
+    status: planned
+
+  "SYSEN 5900":
+    slug: sysen-5900
+    name: "Project"
+    openviking: viking://resources/cornell-kb/sysen-5900
+    obsidian: "Cornell/SYSEN 5900"
+    semester: "FA26 / SP27"
+    credits: 3
+    status: planned
+
+  "ORIE 5100":
+    slug: orie-5100
+    name: "Manufacturing Systems Design: A Consulting Boot Camp"
+    openviking: viking://resources/cornell-kb/orie-5100
+    obsidian: "Cornell/ORIE 5100"
+    semester: FA26
+    credits: 4
+    status: planned
+
+  "SYSEN 6800":
+    slug: sysen-6800
+    name: "Computational Optimization"
+    openviking: viking://resources/cornell-kb/sysen-6800
+    obsidian: "Cornell/SYSEN 6800"
+    semester: FA26
+    credits: 4
+    status: planned
+
+  # ── Spring 2027 ────────────────────────────────────────────────────────
+
+  "SYSEN 5211":
+    slug: sysen-5211
+    name: "Quantitative Methods of Systems Analysis"
+    openviking: viking://resources/cornell-kb/sysen-5211
+    obsidian: "Cornell/SYSEN 5211"
+    semester: SP27
+    credits: 3
+    status: planned
+
+  "SYSEN 5530":
+    slug: sysen-5530
+    name: "Digital Systems Modeling & Analysis with Generative AI"
+    openviking: viking://resources/cornell-kb/sysen-5530
+    obsidian: "Cornell/SYSEN 5530"
+    semester: SP27
+    credits: 3
+    status: planned
+
+  "SYSEN 5410":
+    slug: sysen-5410
+    name: "Cyber-Physical Systems"
+    openviking: viking://resources/cornell-kb/sysen-5410
+    obsidian: "Cornell/SYSEN 5410"
+    semester: SP27
+    credits: 4
+    status: planned
+
+  "SYSEN 6880":
+    slug: sysen-6880
+    name: "Industrial Big Data Analytics and Machine Learning"
+    openviking: viking://resources/cornell-kb/sysen-6880
+    obsidian: "Cornell/SYSEN 6880"
+    semester: SP27
+    credits: 4
+    status: planned
+
+  # ── Electives / unconfirmed ────────────────────────────────────────────
+
+  "SYSEN 5381":
+    slug: sysen-5381
+    name: "Data Science and AI for Systems Engineering"
+    openviking: viking://resources/cornell-kb/sysen-5381
+    obsidian: "Cornell/SYSEN 5381"
+    semester: SP27
+    credits: 3
+    status: planned
+    note: "Offering unconfirmed for SP27"
+
+  # ── Reference / test ───────────────────────────────────────────────────
+
+  "E2E-TEST":
+    slug: e2e-test
+    name: "End-to-End Gate Test Course"
+    openviking: viking://resources/cornell-kb/E2E-TEST
+    obsidian: ""
+    semester: TEST
+    credits: 0
+    status: active
+    note: "Synthetic course for e2e gate validation only"
+
+  "TEST-FIXTURE":
+    slug: test-fixture
+    name: "Media Fixture Validation Course"
+    openviking: viking://resources/cornell-kb/TEST-FIXTURE
+    obsidian: ""
+    semester: TEST
+    credits: 0
+    status: active
+    note: "Synthetic course for media fixture validation only"

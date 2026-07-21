@@ -96,9 +96,13 @@ Verify source-grounded answers, lecture explanations, quiz generation, new homew
 - Empty retrieval: graceful handling of zero results across search/trace/explain/review
 - Scope: `source_scope` filter correctly separates assessment from course material
 
-### Priority 7: Course onboarding templates ⬜
+### Priority 7: Course onboarding templates ✅
 
 Naming conventions, course namespaces, Obsidian output structure.
+
+- `docs/course-onboarding.md` — complete onboarding guide: naming conventions, URI structure, manifest rules, source-type catalog, Obsidian vault template with frontmatter spec, step-by-step checklist
+- `config/course_namespaces.yaml` — authoritative registry of all 12 course codes + 2 test courses, mapping slug, OpenViking namespace, Obsidian path, semester, status
+- Obsidian template: frontmatter with course/lecture/source_type/source_uri/extraction_engine/generated/tags, note structure with Key Concepts/Definitions/Diagrams/Action Items sections, source citation footer
 
 ## Deferred (not blockers for first safe course ingestion)
 
