@@ -43,7 +43,7 @@
 
 ## Verification
 
-- **249 tests pass** (was 161 at start of hardening milestone; 227 after Priority 1-4; +22 recovery tooling tests)
+- **276 tests pass** (was 249 after Priority 5; +27 student workflow smoke tests)
 - Python compilation clean
 - `git diff --check` clean
 - Preflight: 4/4 PASS (offline), SKILL.md conflict resolved
@@ -83,9 +83,18 @@ Structured ingestion logs, retry/resume checkpoints, queue/error reporting, reso
 - `config/course_manifest_template.json` — starter template with 6 source types (textbook, transcript, homework, exam, slides, derived OCR)
 - `tests/test_recovery_tooling.py` — 22 offline tests covering logger, checkpoint/resume, inventory snapshot/diff, cleanup, template validation
 
-### Priority 6: Student workflow smoke tests ⬜
+### Priority 6: Student workflow smoke tests ✅
 
 Verify source-grounded answers, lecture explanations, quiz generation, new homework-style problems, separate answer keys, empty-retrieval behavior, and Hindsight/OpenViking scope selection.
+
+- `tests/test_student_workflow_smoke.py` — 27 smoke tests covering all 7 verification points
+- Source-grounded: search → trace → source-read pipeline verified
+- Explanations: `explain_fact` with found/missing handling
+- Quiz: no inline answers, deterministic with seed, empty facts handling
+- Homework: practice variants, LLM-generated new problems, original wording never copied
+- Answer keys: structurally separate, IDs match questions
+- Empty retrieval: graceful handling of zero results across search/trace/explain/review
+- Scope: `source_scope` filter correctly separates assessment from course material
 
 ### Priority 7: Course onboarding templates ⬜
 
@@ -106,4 +115,4 @@ Naming conventions, course namespaces, Obsidian output structure.
 - Real course ingestion performed only from a validated manifest. ⬜
 - OpenViking and Hindsight read-back checks pass. ⬜
 - No unexpected memory-linking activity or internal token explosion. ⬜
-- Full tests, syntax checks, and retrieval/source-read checks pass. ✅ (249 tests)
+- Full tests, syntax checks, and retrieval/source-read checks pass. ✅ (276 tests)
