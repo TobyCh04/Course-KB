@@ -31,6 +31,7 @@ try:
         validate_metadata_filters,
     )
     from . import reranker as reranker_mod
+    from .source_reader import DEFAULT_MAX_L2_TOKENS
 except ImportError:  # pragma: no cover - exercised by direct CLI use
     from scripts.retrieval.lexical_index import DEFAULT_ROOT, LexicalIndex, build_lexical_index, load_index, save_index
     from scripts.core.openviking_backend import (
@@ -39,6 +40,7 @@ except ImportError:  # pragma: no cover - exercised by direct CLI use
         validate_metadata_filters,
     )
     import reranker as reranker_mod
+    from scripts.retrieval.source_reader import DEFAULT_MAX_L2_TOKENS
 DEFAULT_OPENVIKING_URL = "http://127.0.0.1:1934"
 DEFAULT_INDEX_PATH = Path("data/lexical_index.json")
 DEFAULT_RRF_K = 60
@@ -50,6 +52,8 @@ DEFAULT_TOP_K = 5
 DEFAULT_MAX_SOURCES = 8
 DEFAULT_RERANK_TOP = 0
 DEFAULT_EXPERIMENTAL_RERANK_TOP = 20
+DEFAULT_GENERATION_CANDIDATE_LIMIT = 16
+DEFAULT_GENERATION_USE_RRF = False
 DEFAULT_RERANK_SCORE_DROP = 0.15
 DEFAULT_RERANK_RELATIVE_FLOOR = 0.08
 DEFAULT_FUSED_SCORE_DROP = 0.005
@@ -278,6 +282,176 @@ def _dedupe_by_canonical_uri(results: list[dict[str, Any]]) -> list[dict[str, An
     return deduped
 
 
+def build_generation_candidate_pool(
+    dense_results: list[dict[str, Any]],
+    lexical_results: list[dict[str, Any]],
+    *,
+    candidate_limit: int = DEFAULT_GENERATION_CANDIDATE_LIMIT,
+    k: int = DEFAULT_RRF_K,
+    dense_weight: float = DEFAULT_DENSE_WEIGHT,
+    lexical_weight: float = DEFAULT_LEXICAL_WEIGHT,
+    use_rrf: bool = DEFAULT_GENERATION_USE_RRF,
+    force_rrf: bool = False,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Build the candidate set handed to the active generation model.
+
+    Small unions preserve both retrieval rankings directly. RRF is only a
+    candidate-budget guard when the deduplicated union exceeds the limit; it
+    is never used as the final evidence decision.
+    """
+    if candidate_limit < 1:
+        raise ValueError("candidate_limit must be positive")
+    union: dict[str, dict[str, Any]] = {}
+    for source_name, results in (("dense", dense_results), ("lexical", lexical_results)):
+        for rank, item in enumerate(results, start=1):
+            can = item.get("canonical_uri") or item.get("uri", "")
+            if not can:
+                continue
+            candidate = union.get(can)
+            if candidate is None:
+                candidate = dict(item)
+                candidate["retrieval_sources"] = []
+                union[can] = candidate
+            if source_name not in candidate["retrieval_sources"]:
+                candidate["retrieval_sources"].append(source_name)
+            candidate[f"{source_name}_rank"] = rank
+            candidate[f"{source_name}_score"] = item.get("score")
+            if len(item.get("abstract", "") or "") > len(candidate.get("abstract", "") or ""):
+                candidate["abstract"] = item.get("abstract", "")
+            if len(item.get("overview", "") or "") > len(candidate.get("overview", "") or ""):
+                candidate["overview"] = item.get("overview", "")
+            candidate["metadata"] = candidate.get("metadata") or item.get("metadata") or {}
+
+    union_count = len(union)
+    if force_rrf or (use_rrf and union_count > candidate_limit):
+        fused = reciprocal_rank_fusion(
+            dense_results,
+            lexical_results,
+            k=k,
+            dense_weight=dense_weight,
+            lexical_weight=lexical_weight,
+        )[:candidate_limit]
+        for item in fused:
+            item["retrieval_sources"] = sorted({
+                contribution["source"]
+                for contribution in item.get("provenance", [])
+            })
+        policy = (
+            f"rrf_top{candidate_limit}_forced"
+            if force_rrf
+            else f"rrf_top{candidate_limit}_overflow"
+        )
+        return fused, {
+            "policy": policy,
+            "candidate_union_count": union_count,
+            "candidate_limit": candidate_limit,
+            "rrf_k": k,
+        }
+
+    if union_count > candidate_limit:
+        return list(union.values())[:candidate_limit], {
+            "policy": f"union_top{candidate_limit}_no_rrf",
+            "candidate_union_count": union_count,
+            "candidate_limit": candidate_limit,
+            "rrf_k": None,
+        }
+
+    return list(union.values()), {
+        "policy": "union",
+        "candidate_union_count": union_count,
+        "candidate_limit": candidate_limit,
+        "rrf_k": None,
+    }
+
+
+def _safe_generation_metadata(metadata: Any) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {}
+    return {
+        str(key): value
+        for key, value in metadata.items()
+        if value is None or isinstance(value, (str, int, float, bool))
+    }
+
+
+def _read_l1_overview(
+    backend: CornellOpenVikingBackend,
+    uri: str,
+) -> tuple[str, str | None]:
+    """Read only an OpenViking overview resource, never arbitrary L2 content."""
+    if not uri.endswith("/.overview.md"):
+        return "", None
+    try:
+        raw = backend.read(uri, limit=8000)
+        overview = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False)
+        return overview[:8000], None
+    except Exception as error:
+        return "", repr(error)
+
+
+def build_generation_candidate_manifest(
+    backend: CornellOpenVikingBackend,
+    candidates: list[dict[str, Any]],
+    *,
+    candidate_limit: int = DEFAULT_GENERATION_CANDIDATE_LIMIT,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """Expose navigation metadata to the answer model without L2 snippets.
+
+    The returned manifest deliberately contains candidate IDs, L0/L1 fields,
+    canonical source URIs, metadata, and retrieval provenance. It does not
+    include ``rerank_context`` or arbitrary source text.
+    """
+    manifest: list[dict[str, Any]] = []
+    failures: list[dict[str, str]] = []
+    for index, candidate in enumerate(candidates[:candidate_limit], start=1):
+        uri = str(candidate.get("uri", ""))
+        l1_overview = str(candidate.get("overview", "") or "")[:8000]
+        if not l1_overview:
+            l1_overview, error = _read_l1_overview(backend, uri)
+            if error:
+                failures.append({"uri": uri, "error": error})
+        provenance = list(candidate.get("provenance", []) or [])
+        dense_contribution = next(
+            (item for item in provenance if item.get("source") == "dense"), {}
+        )
+        lexical_contribution = next(
+            (item for item in provenance if item.get("source") == "lexical"), {}
+        )
+        manifest.append({
+            "candidate_id": f"C{index:02d}",
+            "canonical_uri": candidate.get("canonical_uri") or _canonical_uri(uri),
+            "resource_uri": uri,
+            "l0_abstract": str(candidate.get("abstract", "") or "")[:4000],
+            "l1_overview": l1_overview,
+            "metadata": _safe_generation_metadata(candidate.get("metadata")),
+            "retrieval_provenance": {
+                "sources": list(candidate.get("retrieval_sources", []) or []),
+                "dense_rank": candidate.get("dense_rank", dense_contribution.get("rank")),
+                "lexical_rank": candidate.get("lexical_rank", lexical_contribution.get("rank")),
+                "dense_score": candidate.get("dense_score", dense_contribution.get("score")),
+                "lexical_score": candidate.get("lexical_score", lexical_contribution.get("score")),
+                "rrf_score": candidate.get("fused_score"),
+                "contributions": provenance,
+            },
+        })
+    return manifest, failures
+
+
+def build_source_selection_guidance(candidate_count: int) -> str:
+    """Return instructions embedded in the active model's answer context."""
+    return (
+        f"You have {candidate_count} candidate source manifests. Each manifest has a "
+        "candidate_id, L0 abstract, L1 overview, metadata, canonical source URI, "
+        "and retrieval provenance. Select the smallest complete evidence set before "
+        "answering. Use multiple sources/candidates when complementary evidence is needed. "
+        "Reject duplicate, merely related, or misleading distractors. Preserve the "
+        "canonical URI and cite only candidates actually used. L0/L1 are navigation "
+        "evidence. After selecting IDs, invoke read_selected_generation_sources with "
+        f"those IDs; it reads selected L2 evidence under a {DEFAULT_MAX_L2_TOKENS:,}-token total budget "
+        "before making detailed claims. State when the selected evidence is incomplete."
+    )
+
+
 DEFAULT_BLEND_RRF_WEIGHT = 0.70
 DEFAULT_BLEND_RERANKER_WEIGHT = 0.30
 DEFAULT_BLEND_SCORE_DROP = 0.15
@@ -438,6 +612,10 @@ def hybrid_search(
     blend_rrf_weight: float | None = None,
     blend_reranker_weight: float = DEFAULT_BLEND_RERANKER_WEIGHT,
     filters: dict[str, Any] | None = None,
+    generation_mode: bool = False,
+    candidate_limit: int = DEFAULT_GENERATION_CANDIDATE_LIMIT,
+    use_rrf: bool = DEFAULT_GENERATION_USE_RRF,
+    force_rrf: bool = False,
 ) -> dict[str, Any]:
     """Search, fuse, read, and optionally rerank with production-safe source context.
 
@@ -464,15 +642,6 @@ def hybrid_search(
     dense_all = [_normalize_dense_result(h) for h in dense_raw.get("resources", [])]
     dense_results = _dedupe_by_canonical_uri(dense_all)
 
-    start = time.monotonic()
-    fused = reciprocal_rank_fusion(
-        dense_results,
-        lexical_results,
-        k=k,
-        dense_weight=dense_weight,
-        lexical_weight=lexical_weight,
-    )
-    fusion_ms = round((time.monotonic() - start) * 1000, 2)
     result = {
         "query": query,
         "dense_query": dense_query,
@@ -483,10 +652,52 @@ def hybrid_search(
         "mode": "dense_plus_lexical",
         "dense_candidates": len(dense_results),
         "lexical_candidates": len(lexical_results),
-        "fusion_latency_ms": fusion_ms,
         "results": [],
         "source_read_failures": [],
     }
+
+    if generation_mode:
+        start = time.monotonic()
+        candidate_pool, candidate_selection = build_generation_candidate_pool(
+            dense_results,
+            lexical_results,
+            candidate_limit=candidate_limit,
+            k=k,
+            dense_weight=dense_weight,
+            lexical_weight=lexical_weight,
+            use_rrf=use_rrf,
+            force_rrf=force_rrf,
+        )
+        result["fusion_latency_ms"] = round((time.monotonic() - start) * 1000, 2)
+        manifest, l1_failures = build_generation_candidate_manifest(
+            backend,
+            candidate_pool,
+            candidate_limit=candidate_limit,
+        )
+        result["source_read_failures"].extend(l1_failures)
+        result["mode"] = "generation_candidates"
+        result["generation_candidate_pool"] = True
+        result["candidate_selection"] = candidate_selection
+        result["l2_read_contract"] = {
+            "operation": "read_selected_generation_sources",
+            "required_before_detailed_answer": True,
+            "input": {"selected_candidate_ids": "list[str]"},
+            "max_total_l2_tokens": DEFAULT_MAX_L2_TOKENS,
+            "uri_policy": "resolve IDs from this manifest; reject arbitrary model URIs",
+        }
+        result["generation_guidance"] = build_source_selection_guidance(len(manifest))
+        result["results"] = manifest
+        return result
+
+    start = time.monotonic()
+    fused = reciprocal_rank_fusion(
+        dense_results,
+        lexical_results,
+        k=k,
+        dense_weight=dense_weight,
+        lexical_weight=lexical_weight,
+    )
+    result["fusion_latency_ms"] = round((time.monotonic() - start) * 1000, 2)
 
     if rerank_top > 0 and fused:
         context_start = time.monotonic()

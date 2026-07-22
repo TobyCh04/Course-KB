@@ -34,10 +34,12 @@ try:
     from ..core.openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
     from ..retrieval.hybrid_retrieval import DEFAULT_MAX_SOURCES, DEFAULT_RERANK_TOP, DEFAULT_TOP_K
     from ..retrieval.query_orchestrator import execute_planned_query
+    from ..retrieval.source_reader import read_selected_generation_sources
 except ImportError:  # pragma: no cover - exercised by direct CLI use
     from scripts.core.openviking_backend import CornellOpenVikingBackend, CORNELL_NAMESPACE
     from scripts.retrieval.hybrid_retrieval import DEFAULT_MAX_SOURCES, DEFAULT_RERANK_TOP, DEFAULT_TOP_K
     from scripts.retrieval.query_orchestrator import execute_planned_query
+    from scripts.retrieval.source_reader import read_selected_generation_sources
 
 DEFAULT_OPENVIKING_URL = "http://127.0.0.1:1934"
 DEFAULT_LIMIT = 8
@@ -79,6 +81,15 @@ def cmd_source(backend: CornellOpenVikingBackend, uri: str, read_limit: int) -> 
         "uri": uri,
         "content": content,
     }
+
+
+def cmd_read_selected(
+    backend: CornellOpenVikingBackend,
+    candidates: list[dict[str, Any]],
+    selected_ids: list[str],
+) -> dict[str, Any]:
+    """Read L2 content for model-selected candidate IDs only."""
+    return read_selected_generation_sources(backend, candidates, selected_ids)
 
 
 def cmd_trace(backend: CornellOpenVikingBackend, query: str, limit: int) -> dict[str, Any]:
@@ -213,7 +224,7 @@ def main() -> int:
     )
     parser.add_argument(
         "command",
-        choices=["search", "source", "trace", "health", "hybrid", "hybrid-trace"],
+        choices=["search", "source", "trace", "health", "hybrid", "hybrid-trace", "read-selected"],
         help=(
             "search: query the index | source: read a URI | trace: search+read top hit | "
             "health: check server | hybrid: dense+BM25 fusion | hybrid-trace: hybrid+read top"
@@ -224,6 +235,14 @@ def main() -> int:
     parser.add_argument("--read-limit", type=int, default=20000, help="Max chars to read (source/hybrid-trace)")
     parser.add_argument("--url", default=DEFAULT_OPENVIKING_URL, help="OpenViking server URL")
     parser.add_argument("--timeout", type=float, default=30, help="Request timeout in seconds")
+    parser.add_argument(
+        "--candidate-manifest", default="",
+        help="JSON file containing a generation result manifest (read-selected)",
+    )
+    parser.add_argument(
+        "--selected-ids", default="",
+        help="Comma-separated candidate IDs selected for L2 reading (read-selected)",
+    )
     parser.add_argument(
         "--index-path", default=DEFAULT_LEXICAL_INDEX_PATH,
         help="Path to the BM25 lexical index (hybrid commands)",
@@ -264,6 +283,8 @@ def main() -> int:
 
     if args.command in ("search", "source", "trace", "hybrid", "hybrid-trace") and not args.query:
         parser.error(f"{args.command} requires a query or URI argument")
+    if args.command == "read-selected" and (not args.candidate_manifest or not args.selected_ids):
+        parser.error("read-selected requires --candidate-manifest and --selected-ids")
 
     backend = _get_backend(args.url, args.timeout)
 
@@ -273,6 +294,13 @@ def main() -> int:
         result = cmd_search(backend, args.query, args.limit)
     elif args.command == "source":
         result = cmd_source(backend, args.query, args.read_limit)
+    elif args.command == "read-selected":
+        manifest_payload = json.loads(Path(args.candidate_manifest).read_text(encoding="utf-8"))
+        candidates = manifest_payload.get("results", manifest_payload)
+        if not isinstance(candidates, list):
+            parser.error("candidate manifest must be a list or an object with a results list")
+        selected_ids = [item.strip() for item in args.selected_ids.split(",") if item.strip()]
+        result = cmd_read_selected(backend, candidates, selected_ids)
     elif args.command == "trace":
         result = cmd_trace(backend, args.query, args.limit)
     elif args.command == "hybrid":

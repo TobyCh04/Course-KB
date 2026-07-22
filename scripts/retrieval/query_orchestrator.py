@@ -10,12 +10,17 @@ try:
     from ..core.openviking_backend import CORNELL_NAMESPACE, CornellOpenVikingBackend
     from ..retrieval.hybrid_retrieval import (
         DEFAULT_EXPERIMENTAL_RERANK_TOP,
+        build_source_selection_guidance,
         select_final_sources,
     )
     from ..retrieval.query_models import PlanningResult, QueryPlan, QueryTrace
 except ImportError:  # pragma: no cover - exercised by direct CLI use
     from scripts.core.openviking_backend import CORNELL_NAMESPACE, CornellOpenVikingBackend
-    from scripts.retrieval.hybrid_retrieval import DEFAULT_EXPERIMENTAL_RERANK_TOP, select_final_sources
+    from scripts.retrieval.hybrid_retrieval import (
+        DEFAULT_EXPERIMENTAL_RERANK_TOP,
+        build_source_selection_guidance,
+        select_final_sources,
+    )
     from scripts.retrieval.query_models import PlanningResult, QueryPlan, QueryTrace
 
 HindsightRecall = Callable[..., Any]
@@ -37,6 +42,7 @@ def execute_planned_query(
     if max_sources < 1:
         raise ValueError("max_sources must be positive")
     merged: dict[str, dict[str, Any]] = {}
+    generation_metadata: dict[str, Any] | None = None
 
     def merge_result(result: dict[str, Any], provenance: list[str]) -> None:
         for candidate in result.get("results", []):
@@ -84,8 +90,15 @@ def execute_planned_query(
                 blend_rrf_weight=blend_rrf_weight,
                 blend_reranker_weight=blend_reranker_weight,
                 enable_reranker=enable_reranker,
+                generation_mode=not enable_reranker,
                 filters=plan.filters.to_dict(),
             )
+            if result.get("generation_candidate_pool"):
+                generation_metadata = {
+                    "candidate_selection": result.get("candidate_selection", {}),
+                    "l2_read_contract": result.get("l2_read_contract", {}),
+                    "generation_guidance": result.get("generation_guidance", ""),
+                }
             provenance = [query.text for query in openviking_queries]
             merge_result(result, provenance)
             record["result_count"] = len(result.get("results", []))
@@ -137,16 +150,31 @@ def execute_planned_query(
             trace.execution.append(record)
 
     candidates = sorted(merged.values(), key=_candidate_score, reverse=True)
-    if candidates:
+    if generation_metadata is not None:
+        final_sources = [dict(candidate) for candidate in candidates[:20]]
+        for index, candidate in enumerate(final_sources, start=1):
+            candidate["candidate_id"] = f"C{index:02d}"
+        source_cutoff = dict(generation_metadata.get("candidate_selection", {}))
+        source_cutoff["selected_count"] = len(final_sources)
+        generation_guidance = generation_metadata.get("generation_guidance", "")
+        if not generation_guidance:
+            generation_guidance = build_source_selection_guidance(len(final_sources))
+    elif candidates:
         final_sources, source_cutoff = select_final_sources(
             candidates,
             default_limit=plan.limit,
             max_sources=max_sources,
             reranked=any("rerank_score" in item for item in candidates),
         )
+        generation_guidance = ""
     else:
         final_sources, source_cutoff = [], {}
-    trace.source_uris = [item.get("uri", "") for item in final_sources if item.get("uri")]
+        generation_guidance = ""
+    trace.source_uris = [
+        item.get("canonical_uri") or item.get("resource_uri") or item.get("uri", "")
+        for item in final_sources
+        if item.get("canonical_uri") or item.get("resource_uri") or item.get("uri")
+    ]
     if trace.status == "planned" and any(item.get("status") == "failed" for item in trace.execution):
         trace.status = "partial_failure"
     return {
@@ -155,6 +183,9 @@ def execute_planned_query(
         "plan": plan.to_dict(),
         "trace": trace.to_dict(),
         "source_cutoff": source_cutoff,
+        "candidate_selection": generation_metadata.get("candidate_selection", {}) if generation_metadata else {},
+        "l2_read_contract": generation_metadata.get("l2_read_contract", {}) if generation_metadata else {},
+        "generation_guidance": generation_guidance,
         "results": final_sources,
     }
 
@@ -170,6 +201,7 @@ def _execute_openviking(
     blend_rrf_weight: float | None = None,
     blend_reranker_weight: float = 0.30,
     enable_reranker: bool = False,
+    generation_mode: bool = True,
     filters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if plan.retrieval_mode == "dense":
@@ -184,6 +216,10 @@ def _execute_openviking(
         lexical_query=lexical_query,
         blend_rrf_weight=blend_rrf_weight,
         blend_reranker_weight=blend_reranker_weight,
+        generation_mode=generation_mode,
+        candidate_limit=16,
+        use_rrf=False,
+        force_rrf=False,
         filters=filters,
         rerank_top=DEFAULT_EXPERIMENTAL_RERANK_TOP
         if enable_reranker and plan.retrieval_mode == "hybrid_rerank"
@@ -192,6 +228,9 @@ def _execute_openviking(
 
 
 def _candidate_score(candidate: dict[str, Any]) -> float:
+    provenance = candidate.get("retrieval_provenance")
+    if isinstance(provenance, dict) and provenance.get("rrf_score") is not None:
+        return float(provenance["rrf_score"])
     return float(candidate.get("rerank_score", candidate.get("fused_score", candidate.get("score", 0.0))))
 
 
