@@ -48,18 +48,18 @@ courses:
       - factory layout
       - production systems
 
-  SYSEN 6800:
-    name: "Computational Optimization"
+  SYSEN 5680:
+    name: "AI for Energy Systems"
     semester: "Fall 2026"
     credits: 4
     lectures: 28
     topics:
-      - linear programming
-      - integer programming
-      - optimization algorithms
-      - computational methods
+      - energy systems
+      - artificial intelligence
+      - systems modeling
+      - optimization and decision support
 
-  # === SPRING 2027 (20 credits) ===
+  # === SPRING 2027 (19 credits) ===
 
   SYSEN 5211:
     name: "Quantitative Methods of Systems Analysis"
@@ -94,14 +94,14 @@ courses:
       - real-time systems
       - control and computation
 
-  SYSEN 6880:
-    name: "Industrial Big Data Analytics and Machine Learning"
+  SYSEN 5381:
+    name: "Data Science and AI for Systems Engineering"
     semester: "Spring 2027"
-    credits: 4
+    credits: 3
     lectures: 28
     topics:
-      - big data analytics
+      - data science for systems engineering
       - machine learning
-      - industrial applications
-      - data pipelines
+      - industrial analytics
+      - AI-assisted systems analysis
 

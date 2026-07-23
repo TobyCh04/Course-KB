@@ -50,14 +50,15 @@ courses:
     credits: 4
     status: planned
 
-  "SYSEN 6800":
-    slug: sysen-6800
-    name: "Computational Optimization"
-    openviking: viking://resources/cornell-kb/sysen-6800
-    obsidian: "Cornell/SYSEN 6800"
+  "SYSEN 5680":
+    slug: sysen-5680
+    name: "AI for Energy Systems"
+    openviking: viking://resources/cornell-kb/sysen-5680
+    obsidian: "Cornell/SYSEN 5680"
     semester: FA26
     credits: 4
     status: planned
+    note: "Registered course"
 
   # ── Spring 2027 ────────────────────────────────────────────────────────
 
@@ -88,17 +89,6 @@ courses:
     credits: 4
     status: planned
 
-  "SYSEN 6880":
-    slug: sysen-6880
-    name: "Industrial Big Data Analytics and Machine Learning"
-    openviking: viking://resources/cornell-kb/sysen-6880
-    obsidian: "Cornell/SYSEN 6880"
-    semester: SP27
-    credits: 4
-    status: planned
-
-  # ── Electives / unconfirmed ────────────────────────────────────────────
-
   "SYSEN 5381":
     slug: sysen-5381
     name: "Data Science and AI for Systems Engineering"
@@ -107,7 +97,7 @@ courses:
     semester: SP27
     credits: 3
     status: planned
-    note: "Offering unconfirmed for SP27"
+    note: "Selected instead of SYSEN 6880; registered course plan"
 
   # ── Reference / test ───────────────────────────────────────────────────
 

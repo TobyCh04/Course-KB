@@ -162,8 +162,9 @@ connectivity:
   rounds: 3
   timeout_seconds: 5
   command: "python scripts/ops/connectivity_test.py --rounds 3 --timeout 5"
-  ollama_tags_path: "/api/tags"
+  embedding_url: "http://100.104.205.105:8001"
   embedding_health_path: "/health"
+  ollama_tags_path: "/api/tags"
   openviking_url: "http://127.0.0.1:1934"
   hindsight_health_url: "http://127.0.0.1:8888/health"
 

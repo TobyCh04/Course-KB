@@ -166,11 +166,12 @@ def run_connectivity_test(
 # ---------------------------------------------------------------------------
 
 _LAPTOP_HOST = os.environ.get("CORNELL_KB_LAPTOP_HOST", "100.104.205.105")
+_EMBEDDING_URL = os.environ.get("CORNELL_KB_EMBEDDING_URL", f"http://{_LAPTOP_HOST}:8001")
 _OPENVIKING_URL = os.environ.get("CORNELL_KB_OPENVIKING_URL", "http://127.0.0.1:1934")
 _HINDSIGHT_URL = os.environ.get("CORNELL_KB_HINDSIGHT_URL", "http://127.0.0.1:8888")
 _DEFAULT_ENDPOINTS: list[Endpoint] = [
     Endpoint("ollama-tags", f"http://{_LAPTOP_HOST}:11434/api/tags"),
-    Endpoint("embedding", f"http://{_LAPTOP_HOST}:18002/health"),
+    Endpoint("embedding", f"{_EMBEDDING_URL.rstrip('/')}/health"),
     Endpoint("openviking", _OPENVIKING_URL),
     Endpoint("hindsight-health", f"{_HINDSIGHT_URL.rstrip('/')}/health"),
 ]

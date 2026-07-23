@@ -24,8 +24,10 @@ from __future__ import annotations
 import sys
 import argparse
 import json
+import os
 import subprocess
 import sys
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -60,8 +62,8 @@ except ImportError:  # pragma: no cover — direct CLI use
     )
     from scripts.ingestion.source_manifest import _canonical_resource_uri, _entries, _metadata_for_entry, load_manifest, validate_manifest
 
-HINDSIGHT_URL = "http://localhost:8888"
-EMBEDDING_URL = "http://127.0.0.1:18002"
+HINDSIGHT_URL = os.environ.get("CORNELL_KB_HINDSIGHT_URL", "http://localhost:8888")
+EMBEDDING_URL = os.environ.get("CORNELL_KB_EMBEDDING_URL", "http://100.104.205.105:8001")
 REQUIRED_MODEL = "deepseek-v4-pro"
 REQUIRED_BASE_URL = "https://api.deepseek.com/v1"
 
@@ -121,10 +123,16 @@ def check_manifest(manifest_path: str | Path, root: str | Path) -> CheckResult:
 
 
 def _probe_url(url: str, *, timeout: float = 5) -> tuple[bool, str]:
-    """Simple HTTP GET probe; returns (reachable, detail)."""
+    """Read-only GET health probe; returns (reachable, detail)."""
     try:
-        client = JsonHttpClient(timeout=timeout, retries=0)
-        client.post_json(url, {})
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        request = urllib.request.Request(
+            url,
+            headers={"Accept": "application/json"},
+            method="GET",
+        )
+        with opener.open(request, timeout=timeout) as response:
+            response.read(512)
         return True, "reachable"
     except Exception as exc:
         return False, str(exc)[:200]

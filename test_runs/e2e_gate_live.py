@@ -61,7 +61,7 @@ class LiveHindsightClient:
     ) -> Any:
         payload: dict[str, Any] = {
             "query": query,
-            "max_tokens": max(256, top_k * 1024),
+            "max_tokens": 256,
         }
         if tags:
             payload["tags"] = tags

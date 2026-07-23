@@ -1,8 +1,8 @@
 # Cornell-KB Project Status
 
-**Last updated:** 2026-07-22
+**Last updated:** 2026-07-23
 **Branch:** `master`
-**Working tree:** clean at time of last commit; pre-semester hardening changes uncommitted
+**Working tree:** release changes pending commit; generated live-run outputs remain ignored
 
 ## Completed — pre-semester hardening (2026-07-21)
 
@@ -43,7 +43,7 @@
 
 ## Verification
 
-- **313 tests pass** (full project suite, including pipeline, batch-ingestion, connectivity, and live-readback contracts)
+- **313 tests passed in the previous verification run**; release-only changes in this pass were not retested by request
 - Python compilation clean
 - `git diff --check` clean
 - Preflight: 4/4 PASS (offline), SKILL.md conflict resolved
@@ -52,9 +52,12 @@
 - Recovery tooling: 22/22 PASS — structured JSONL logging, checkpoint/resume, resource inventory snapshot/diff, test cleanup (OpenViking + Hindsight), course manifest template
 - Laptop pipeline smoke: text discovery/processing/manifest emission PASS; targeted pipeline contract suite 6/6 PASS
 - Expanded benchmark: synthetic 18/18 full lexical + BGE-small + hybrid PASS; adversarial control-material 22 sources/14 queries full lexical + BGE-small + hybrid PASS; `production_services_accessed: false`
-- Connectivity run: Ollama 3/3, OpenViking 3/3, Hindsight health 3/3; laptop embedding endpoint 0/3 and remains unresolved
+- Connectivity run: Ollama 3/3, embedding 3/3 at `100.104.205.105:8001/health`, OpenViking 3/3, Hindsight health 3/3
 - Live readback smoke: one real HW1-derived artifact indexed, read back from the source-content leaf with JSON normalization, and cleaned successfully; `memory_linking_present: false`
-- Control corpus live write phase: 22/22 real OpenViking writes completed with 0 failures; the earlier full run stopped at the old exact-prefix readback assertion before Hindsight, so full 22-source live replay remains pending after the fix
+- Control corpus live replay: 22/22 real OpenViking writes, 22/22 source readbacks, 22 Hindsight facts in `[5,5,5,5,2]`, non-empty recall, OpenViking remaining 0, Hindsight TEST bank removed
+- Original PDF branch: 15/15 original PDFs processed locally through the PDF/OCR path, 15/15 live OpenViking writes/readbacks, 15 Hindsight facts in `[5,5,5]`, cleanup verified zero resources
+- Manifest/hash acceptance: 37/37 source hashes and non-empty derived artifacts verified; final TEST namespace inventory 0 resources
+- Obsidian vault: registered-course scaffold, four Cornell templates, course index notes, and Templates plugin default folder configured
 
 ## Remaining pre-semester work
 
@@ -126,7 +129,7 @@ and `step3_hindsight_plan.md` that require zero real course files:
 | D1 | ✅ **Laptop pipeline script** | 6.2 | `scripts/ops/laptop_pipeline.py` discovers audio/PDF/image/text inputs, creates deterministic hash-bound artifacts and a JSON manifest, and indexes only with explicit `--index`. Configuration: `config/pipeline_laptop.yaml`. |
 | D2 | ✅ **Expanded retrieval benchmark** | 6.3/6.8 | Synthetic regression set: 18 sources/18 hardened queries; lexical, BGE-small, and hybrid RRF all achieved 100% Recall@1/5 and MRR 1.0. Adversarial real-material set: 22 sources/14 queries; lexical Recall@1 0.857/MRR 0.929, semantic 0.357/0.613, hybrid RRF 0.571/0.750, with expected-source/evidence coverage@5 at 1.0. Neither set alone promotes a larger embedding model. |
 | D3 | ✅ **Batch ingestion** | 3.6.9 | `scripts/ops/batch_ingest.py` processes multiple derived artifacts with per-item JSONL logging, continuation after failures, idempotent-skip preservation, and hash/path-based resume. |
-| D4 | ⚠️ **Laptop connectivity test** | 6.2 | `scripts/ops/connectivity_test.py` runs repeated no-proxy HTTP probes with latency statistics and JSON output. In the verified 3-round run, Ollama, OpenViking, and Hindsight health were stable; laptop embedding `100.104.205.105:18002/health` timed out in all 3 rounds and remains the connectivity blocker. |
+| D4 | ✅ **Laptop connectivity test** | 6.2 | `scripts/ops/connectivity_test.py` runs repeated no-proxy HTTP probes with latency statistics and JSON output. Ollama, embedding `100.104.205.105:8001/health`, OpenViking, and Hindsight all passed 3/3 rounds. |
 | D5 | **Embedding A/B smoke test** | 6.3 | Test bge-base-en-v1.5 against bge-small on expanded benchmark. Separate workspace, no production risk. Would tell us if upgrading is worth it before courses start. |
 
 ## Gated by real course files (not doable yet)
@@ -142,8 +145,8 @@ and `step3_hindsight_plan.md` that require zero real course files:
 
 - Strict source-hash policy implemented and live-tested. ✅
 - One isolated end-to-end gate passes all checks. ✅
-- Production cleanup inventory is zero-test and reversible. ⬜
-- Real course ingestion performed only from a validated manifest. ⬜
-- OpenViking and Hindsight read-back checks pass. ⬜
-- No unexpected memory-linking activity or internal token explosion. ⬜
+- Production cleanup inventory is zero-test and reversible. ✅
+- Real course ingestion performed only from a validated manifest. ⬜ (real Cornell course files not yet available)
+- OpenViking and Hindsight read-back checks pass. ✅ (22-source and 15-PDF TEST replays)
+- No unexpected memory-linking activity or internal token explosion. ✅ (TEST replays)
 - Full tests, syntax checks, and retrieval/source-read checks pass. ✅ (313 tests)

@@ -226,7 +226,17 @@ tags:
 *Source: `viking://resources/cornell-kb/sysen-5100/slides/lecture-01-a1b2c3`*
 ```
 
-### 3.3 Frontmatter fields
+### 3.3 Installed vault artifacts
+
+The active vault is `C:/Users/TobyC/obsidian-vault/`.
+
+- Reusable templates: `Templates/Cornell Lecture Note.md`, `Templates/Cornell Concept Note.md`, `Templates/Cornell Assessment Review.md`, and `Templates/Cornell Course Index.md`.
+- Templates core-plugin configuration: `.obsidian/core-plugins.json` enables `templates`; `.obsidian/templates.json` sets the default folder to `Templates`.
+- Registered-course index: `Cornell/Registered Courses.md`.
+- Each registered course has physical `Lectures/`, `Notes/`, `Homework/`, `Exams/`, and `Diagrams/` folders plus a `Course Index.md`.
+- The current registered plan is SYSEN 5100, SYSEN 5930, SYSEN 5900, ORIE 5100, SYSEN 5680, SYSEN 5211, SYSEN 5530, SYSEN 5410, and SYSEN 5381.
+
+### 3.4 Frontmatter fields
 
 | Field | Required | Notes |
 |-------|----------|-------|
@@ -238,7 +248,7 @@ tags:
 | `generated` | ✅ | ISO 8601 timestamp |
 | `tags` | ✅ | At minimum: `cornell`, `<course-slug>`, `<lecture-slug>` |
 
-### 3.4 Naming rules
+### 3.5 Naming rules
 
 - Lecture notes: `Lecture NN - <Title>.md` (two-digit zero-padded lecture number)
 - Concept notes: `<Concept Name>.md` (title case, no lecture prefix)

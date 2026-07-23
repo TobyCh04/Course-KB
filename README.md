@@ -93,7 +93,16 @@ Run the no-proxy repeated service check before an indexed run:
 python scripts/ops/connectivity_test.py --rounds 3 --timeout 5
 ```
 
-It prints machine-readable JSON with per-round status and latency statistics and exits non-zero unless every configured endpoint succeeds in every round. Endpoints are controlled by `CORNELL_KB_LAPTOP_HOST`, `CORNELL_KB_OPENVIKING_URL`, and `CORNELL_KB_HINDSIGHT_URL`. The complete non-secret defaults are in `config/pipeline_laptop.yaml`.
+It prints machine-readable JSON with per-round status and latency statistics and exits non-zero unless every configured endpoint succeeds in every round. Endpoints are controlled by `CORNELL_KB_LAPTOP_HOST`, `CORNELL_KB_EMBEDDING_URL`, `CORNELL_KB_OPENVIKING_URL`, and `CORNELL_KB_HINDSIGHT_URL`. The current laptop embedding default is `http://100.104.205.105:8001/health`. The complete non-secret defaults are in `config/pipeline_laptop.yaml`.
+
+For isolated live operator replays, use the durable scripts under `scripts/ops/`:
+
+```text
+python scripts/ops/live_control_systems_ingestion.py
+python scripts/ops/live_pdf_ingestion.py
+```
+
+These scripts require the local TEST corpus/artifacts, use only `TEST-*` OpenViking courses and Hindsight banks, verify source-content readback, and clean their exact TEST resources. They must never be pointed at production course files without the manifest/preflight gates and explicit approval.
 
 ## Deterministic lexical-index rebuild
 
