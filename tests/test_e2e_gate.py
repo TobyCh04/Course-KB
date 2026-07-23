@@ -20,6 +20,7 @@ from scripts.core.openviking_backend import (
     CORNELL_NAMESPACE,
     CornellOpenVikingBackend,
     SourceHashMismatch,
+    canonical_resource_root,
     resource_uri,
 )
 from e2e_gate import (
@@ -213,6 +214,33 @@ def test_source_readback_passes(gate_tmp, shared_client):
     assert result.passed, result.errors
     assert result.detail["content_length"] > 0
     assert "end-to-end gate source" in result.detail["expected_fragment"]
+
+
+def test_source_readback_uses_leaf_when_real_sdk_rejects_directory(gate_tmp):
+    class DirectoryRejectingClient(FakeLiveClient):
+        def ls(self, uri, **kwargs):
+            if uri != CORNELL_NAMESPACE:
+                return [{"isDir": False, "uri": uri.rstrip("/") + "/content.txt"}]
+            return super().ls(uri, **kwargs)
+
+        def read(self, uri, **kwargs):
+            if uri == canonical_resource_root(uri):
+                raise ValueError("Cannot read directory as file")
+            return super().read(uri, **kwargs)
+
+    client = DirectoryRejectingClient()
+    _step_first_write(
+        gate_tmp["manifest_path"],
+        gate_tmp["root"],
+        _factory(gate_tmp["root"], client),
+    )
+    result = _step_source_readback(
+        gate_tmp["manifest_path"],
+        gate_tmp["root"],
+        _factory(gate_tmp["root"], client),
+    )
+    assert result.passed, result.errors
+    assert result.detail["read_uri"] != result.detail["canonical_uri"]
 
 
 def test_hindsight_isolated_passes(hs_client):

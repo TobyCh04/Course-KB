@@ -62,6 +62,39 @@ per run that is removed even if processing fails. OCR rendering has the same uni
 cleaned-up temporary-directory behavior, so concurrent/repeated runs do not share
 `page_N.png` filenames.
 
+## Laptop media pipeline and batch ingestion
+
+The repeatable laptop path is now split into a safe local phase and an explicit indexing phase:
+
+```text
+python scripts/ops/laptop_pipeline.py \
+  --input-dir C:/path/to/course-material \
+  --output-dir data/artifacts/course-01 \
+  --course SYSEN-424 \
+  --lecture 1
+```
+
+The command discovers audio, PDF, image, and text inputs; runs Whisper, pymupdf/GLM-OCR, or Qwen3-VL as appropriate; writes deterministic SHA-256-named artifacts; and emits `pipeline_manifest.json`. It does not contact OpenViking or Hindsight unless `--index` is explicitly supplied:
+
+```text
+python scripts/ops/laptop_pipeline.py \
+  --input-dir C:/path/to/course-material \
+  --output-dir data/artifacts/course-01 \
+  --course SYSEN-424 \
+  --lecture 1 \
+  --index
+```
+
+`--index` uses `scripts/ops/batch_ingest.py`. Each item carries the original source path and hash even when the indexed file is a derived transcript/OCR/diagram artifact. The JSONL log records indexed, idempotent-skipped, and failed items. A rerun skips only items previously recorded as successful for the same source path and hash; failures remain visible and later items continue. This makes interrupted multi-lecture runs resumable without silently treating changed source content as the old version. Hindsight fact retention remains a separate, explicit step through `scripts/ingestion/ingest.py`; production bank writes still require explicit authorization.
+
+Run the no-proxy repeated service check before an indexed run:
+
+```text
+python scripts/ops/connectivity_test.py --rounds 3 --timeout 5
+```
+
+It prints machine-readable JSON with per-round status and latency statistics and exits non-zero unless every configured endpoint succeeds in every round. Endpoints are controlled by `CORNELL_KB_LAPTOP_HOST`, `CORNELL_KB_OPENVIKING_URL`, and `CORNELL_KB_HINDSIGHT_URL`. The complete non-secret defaults are in `config/pipeline_laptop.yaml`.
+
 ## Deterministic lexical-index rebuild
 
 `data/lexical_index.json` is generated and ignored by Git. Rebuild it from the authoritative manifest with:

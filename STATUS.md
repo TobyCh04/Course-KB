@@ -1,6 +1,6 @@
 # Cornell-KB Project Status
 
-**Last updated:** 2026-07-21
+**Last updated:** 2026-07-22
 **Branch:** `master`
 **Working tree:** clean at time of last commit; pre-semester hardening changes uncommitted
 
@@ -43,13 +43,18 @@
 
 ## Verification
 
-- **276 tests pass** (was 249 after Priority 5; +27 student workflow smoke tests)
+- **313 tests pass** (full project suite, including pipeline, batch-ingestion, connectivity, and live-readback contracts)
 - Python compilation clean
 - `git diff --check` clean
 - Preflight: 4/4 PASS (offline), SKILL.md conflict resolved
 - E2E gate: 8/8 PASS (offline), covers first write, idempotency, hash-mismatch, provenance, read-back, Hindsight, rollback inventory, cleanup
 - Media fixtures: 6/6 PASS (offline), all 6 processors produce artifacts with source_hash, extraction_engine, ingestion_timestamp, downstream_resource_status
 - Recovery tooling: 22/22 PASS — structured JSONL logging, checkpoint/resume, resource inventory snapshot/diff, test cleanup (OpenViking + Hindsight), course manifest template
+- Laptop pipeline smoke: text discovery/processing/manifest emission PASS; targeted pipeline contract suite 6/6 PASS
+- Expanded benchmark: synthetic 18/18 full lexical + BGE-small + hybrid PASS; adversarial control-material 22 sources/14 queries full lexical + BGE-small + hybrid PASS; `production_services_accessed: false`
+- Connectivity run: Ollama 3/3, OpenViking 3/3, Hindsight health 3/3; laptop embedding endpoint 0/3 and remains unresolved
+- Live readback smoke: one real HW1-derived artifact indexed, read back from the source-content leaf with JSON normalization, and cleaned successfully; `memory_linking_present: false`
+- Control corpus live write phase: 22/22 real OpenViking writes completed with 0 failures; the earlier full run stopped at the old exact-prefix readback assertion before Hindsight, so full 22-source live replay remains pending after the fix
 
 ## Remaining pre-semester work
 
@@ -111,17 +116,17 @@ Naming conventions, course namespaces, Obsidian output structure.
 - Web verification/search coverage improvements.
 - Replace local media models (only if verified DeepSeek multimodal API path becomes available).
 
-## Doable before school starts (from plan files — not yet prioritized)
+## Doable before school starts
 
 These are items from `step6_openviking_plan.md`, `step4_note_generator_plan.md`,
 and `step3_hindsight_plan.md` that require zero real course files:
 
 | # | Item | Plan ref | What it is |
 |---|------|----------|-----------|
-| D1 | **Laptop pipeline script** | 6.2 | `laptop_pipeline.py` that runs full media→ingest pipeline end-to-end on RTX 4080. Currently each step (transcribe, OCR, index) is manual. One command: audio+PDF+diagram → OpenViking resource. Needs Tailscale connectivity verified first. |
-| D2 | **Expanded retrieval benchmark** | 6.3/6.8 | Add 15-20 more synthetic sources (formula-heavy, multi-source, ambiguous) to the current 10-query benchmark. Current benchmark saturated at 100% with bge-small — can't measure improvement without harder queries. |
-| D3 | **Batch ingestion** | 3.6.9 | Process multiple lectures/homeworks/exams at once. `ingest_manifest()` exists but no orchestration for multi-file batch runs with logging and resume. |
-| D4 | **Laptop connectivity test** | 6.2 | Verify Tailscale path from mini PC → RTX 4080 laptop (100.104.205.105) is reachable and stable for Ollama/OpenViking calls. |
+| D1 | ✅ **Laptop pipeline script** | 6.2 | `scripts/ops/laptop_pipeline.py` discovers audio/PDF/image/text inputs, creates deterministic hash-bound artifacts and a JSON manifest, and indexes only with explicit `--index`. Configuration: `config/pipeline_laptop.yaml`. |
+| D2 | ✅ **Expanded retrieval benchmark** | 6.3/6.8 | Synthetic regression set: 18 sources/18 hardened queries; lexical, BGE-small, and hybrid RRF all achieved 100% Recall@1/5 and MRR 1.0. Adversarial real-material set: 22 sources/14 queries; lexical Recall@1 0.857/MRR 0.929, semantic 0.357/0.613, hybrid RRF 0.571/0.750, with expected-source/evidence coverage@5 at 1.0. Neither set alone promotes a larger embedding model. |
+| D3 | ✅ **Batch ingestion** | 3.6.9 | `scripts/ops/batch_ingest.py` processes multiple derived artifacts with per-item JSONL logging, continuation after failures, idempotent-skip preservation, and hash/path-based resume. |
+| D4 | ⚠️ **Laptop connectivity test** | 6.2 | `scripts/ops/connectivity_test.py` runs repeated no-proxy HTTP probes with latency statistics and JSON output. In the verified 3-round run, Ollama, OpenViking, and Hindsight health were stable; laptop embedding `100.104.205.105:18002/health` timed out in all 3 rounds and remains the connectivity blocker. |
 | D5 | **Embedding A/B smoke test** | 6.3 | Test bge-base-en-v1.5 against bge-small on expanded benchmark. Separate workspace, no production risk. Would tell us if upgrading is worth it before courses start. |
 
 ## Gated by real course files (not doable yet)
@@ -141,4 +146,4 @@ and `step3_hindsight_plan.md` that require zero real course files:
 - Real course ingestion performed only from a validated manifest. ⬜
 - OpenViking and Hindsight read-back checks pass. ⬜
 - No unexpected memory-linking activity or internal token explosion. ⬜
-- Full tests, syntax checks, and retrieval/source-read checks pass. ✅ (276 tests)
+- Full tests, syntax checks, and retrieval/source-read checks pass. ✅ (313 tests)

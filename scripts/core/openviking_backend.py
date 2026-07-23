@@ -358,6 +358,7 @@ class CornellOpenVikingBackend:
         lecture: int | None = None,
         metadata: dict[str, Any] | None = None,
         source_hash: str | None = None,
+        provenance_source_path: str | Path | None = None,
         dry_run: bool = False,
     ) -> IndexedResource:
         path = validate_source_path(source)
@@ -411,7 +412,7 @@ class CornellOpenVikingBackend:
             lecture=lecture,
             source_type=source_type,
             source_hash=source_hash,
-            source_path=str(path),
+            source_path=str(provenance_source_path or path),
         )
 
         # Only the validated transcript/document path is passed to OpenViking.
