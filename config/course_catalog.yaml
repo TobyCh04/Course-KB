@@ -49,7 +49,7 @@ courses:
       - production systems
 
   SYSEN 5680:
-    name: "AI for Energy Systems"
+    name: "Optimal Control and Decision Theory"
     semester: "Fall 2026"
     credits: 4
     lectures: 28

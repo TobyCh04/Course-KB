@@ -52,7 +52,7 @@ courses:
 
   "SYSEN 5680":
     slug: sysen-5680
-    name: "AI for Energy Systems"
+    name: "Optimal Control and Decision Theory"
     openviking: viking://resources/cornell-kb/sysen-5680
     obsidian: "Cornell/SYSEN 5680"
     semester: FA26
