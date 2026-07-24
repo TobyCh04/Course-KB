@@ -160,3 +160,8 @@ def test_cli_rejects_openai_backend_choice():
     )
     assert result.returncode != 0
     assert "openai" in (result.stderr + result.stdout).lower()
+
+
+def test_default_note_output_path_targets_sync_staging_tree():
+    path = ng.default_note_output_path("SYSEN 5100", 3)
+    assert path.endswith("courses\\sysen-5100\\derived\\notes\\Lecture03.md")

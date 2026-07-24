@@ -43,7 +43,7 @@
 
 ## Verification
 
-- **313 tests passed in the previous verification run**; release-only changes in this pass were not retested by request
+- **318 tests passed in the final verification run**
 - Python compilation clean
 - `git diff --check` clean
 - Preflight: 4/4 PASS (offline), SKILL.md conflict resolved
@@ -58,6 +58,7 @@
 - Original PDF branch: 15/15 original PDFs processed locally through the PDF/OCR path, 15/15 live OpenViking writes/readbacks, 15 Hindsight facts in `[5,5,5]`, cleanup verified zero resources
 - Manifest/hash acceptance: 37/37 source hashes and non-empty derived artifacts verified; final TEST namespace inventory 0 resources
 - Obsidian vault: registered-course scaffold, four Cornell templates, course index notes, and Templates plugin default folder configured
+- Obsidian auto-sync: `scripts/ops/obsidian_sync.py` routes staged generated notes through the course registry, updates managed course-index sections and related-note wikilinks, supports idempotent one-shot/watch/dry-run/prune modes, and is running via the user Startup shortcut `Cornell KB Obsidian Sync`
 
 ## Remaining pre-semester work
 
@@ -129,8 +130,9 @@ and `step3_hindsight_plan.md` that require zero real course files:
 | D1 | ✅ **Laptop pipeline script** | 6.2 | `scripts/ops/laptop_pipeline.py` discovers audio/PDF/image/text inputs, creates deterministic hash-bound artifacts and a JSON manifest, and indexes only with explicit `--index`. Configuration: `config/pipeline_laptop.yaml`. |
 | D2 | ✅ **Expanded retrieval benchmark** | 6.3/6.8 | Synthetic regression set: 18 sources/18 hardened queries; lexical, BGE-small, and hybrid RRF all achieved 100% Recall@1/5 and MRR 1.0. Adversarial real-material set: 22 sources/14 queries; lexical Recall@1 0.857/MRR 0.929, semantic 0.357/0.613, hybrid RRF 0.571/0.750, with expected-source/evidence coverage@5 at 1.0. Neither set alone promotes a larger embedding model. |
 | D3 | ✅ **Batch ingestion** | 3.6.9 | `scripts/ops/batch_ingest.py` processes multiple derived artifacts with per-item JSONL logging, continuation after failures, idempotent-skip preservation, and hash/path-based resume. |
-| D4 | ✅ **Laptop connectivity test** | 6.2 | `scripts/ops/connectivity_test.py` runs repeated no-proxy HTTP probes with latency statistics and JSON output. Ollama, embedding `100.104.205.105:8001/health`, OpenViking, and Hindsight all passed 3/3 rounds. |
-| D5 | **Embedding A/B smoke test** | 6.3 | Test bge-base-en-v1.5 against bge-small on expanded benchmark. Separate workspace, no production risk. Would tell us if upgrading is worth it before courses start. |
+|| D4 | ✅ **Laptop connectivity test** | 6.2 | `scripts/ops/connectivity_test.py` runs repeated no-proxy HTTP probes with latency statistics and JSON output. Ollama, embedding `100.104.205.105:8001/health`, OpenViking, and Hindsight all passed 3/3 rounds. |
+|| D5 | **Embedding A/B smoke test** | 6.3 | Test bge-base-en-v1.5 against bge-small on expanded benchmark. Separate workspace, no production risk. Would tell us if upgrading is worth it before courses start. |
+|| D6 | ✅ **Obsidian auto-sync** | 4.2/4.3 | `scripts/ops/obsidian_sync.py` watches staged generated Markdown, routes it through `course_namespaces.yaml`, updates course indexes and related-note wikilinks, and preserves user-authored content. |
 
 ## Gated by real course files (not doable yet)
 
@@ -138,7 +140,7 @@ and `step3_hindsight_plan.md` that require zero real course files:
 - Obsidian note generation from real lectures — no real transcripts
 - Reranker calibration — needs representative course material
 - Student workflow live testing — no real search queries
-- Wikilink generation in notes — needs real note-to-note relationships
+- Generated-note wikilinks — sync feature is complete; useful relationship coverage still depends on real course notes
 - Pipeline 6.7 (Hermes skill integration) — partially done, needs live retrieval testing
 
 ## Acceptance criteria for declaring production-ready

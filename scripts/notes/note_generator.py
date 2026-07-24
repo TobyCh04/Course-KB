@@ -66,7 +66,8 @@ DEFAULT_BACKEND = "deepseek"  # retained for backward-compatible call signatures
 ALLOWED_BACKENDS = {"deepseek"}
 
 HINDSIGHT_URL = "http://localhost:8888"
-DEFAULT_OUTPUT_DIR = os.path.expanduser("~/obsidian-vault/Cornell")
+PROJECT_ROOT = _Path(__file__).resolve().parents[2]
+DEFAULT_OUTPUT_DIR = str(PROJECT_ROOT / "courses")
 
 
 # ── API Key Loading ────────────────────────────────────────────────────────
@@ -188,6 +189,9 @@ date: {date}
 course: {course_code}
 lecture: {lecture}
 topic: {topic}
+source_type: synthesis
+extraction_engine: deepseek-v4-pro
+generated: {date}
 tags: [lecture-notes, {tags}]
 sources: [{sources}]
 ---
@@ -1131,6 +1135,18 @@ def build_source_verification(transcript_text, facts, diagrams, mode="inline", e
 
 # ── Output ─────────────────────────────────────────────────────────────────
 
+def default_note_output_path(course_code, lecture):
+    """Return the generated-note staging path consumed by obsidian_sync."""
+    course_slug = re.sub(r"[^a-z0-9]+", "-", str(course_code).lower()).strip("-")
+    return os.path.join(
+        DEFAULT_OUTPUT_DIR,
+        course_slug,
+        "derived",
+        "notes",
+        f"Lecture{int(lecture):02d}.md",
+    )
+
+
 def get_course_name(course_code, catalog):
     """Look up course name from catalog."""
     for code, info in catalog.items():
@@ -1321,7 +1337,7 @@ def main():
                         help="(deprecated, ignored) Ollama text generation is no longer used; use diagrams.py/transcribe.py for local vision/OCR.")
 
     # Output
-    parser.add_argument("--output", help="Output file path (default: auto in ~/obsidian-vault/Cornell/)")
+    parser.add_argument("--output", help="Output file path (default: project/courses/<course_slug>/derived/notes/LectureNN.md; watcher syncs it to Obsidian)")
     parser.add_argument("--retain", action="store_true", help="Retain summary into Hindsight")
     parser.add_argument("--hindsight-url", default=HINDSIGHT_URL, help="Hindsight API URL")
     parser.add_argument("--no-fact-check", action="store_true", help="Skip fact-check pass")
@@ -1362,8 +1378,7 @@ def main():
     if args.output:
         output_path = args.output
     else:
-        course_dir = args.course.replace(" ", "")
-        output_path = os.path.join(DEFAULT_OUTPUT_DIR, course_dir, f"Lecture{args.lecture:02d}.md")
+        output_path = default_note_output_path(args.course, args.lecture)
     source_output = args.source_output or f"{output_path}.sources.md"
     source_reference = os.path.relpath(
         source_output, os.path.dirname(os.path.abspath(output_path))

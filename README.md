@@ -104,6 +104,17 @@ python scripts/ops/live_pdf_ingestion.py
 
 These scripts require the local TEST corpus/artifacts, use only `TEST-*` OpenViking courses and Hindsight banks, verify source-content readback, and clean their exact TEST resources. They must never be pointed at production course files without the manifest/preflight gates and explicit approval.
 
+## Obsidian auto-sync
+
+Generated Markdown notes can be staged under `courses/<course_slug>/derived/notes/` and synchronized into the registered vault layout without contacting OpenViking, Hindsight, or an LLM:
+
+```text
+python scripts/ops/obsidian_sync.py --once
+python scripts/ops/obsidian_sync.py --watch --interval 3
+```
+
+The sync reads `config/course_namespaces.yaml`, routes notes to `Lectures/`, `Notes/`, `Homework/`, `Exams/`, or `Diagrams/`, preserves user-authored vault content, adds a managed generated-notes section to each course index, and adds managed related-note wikilinks. It is idempotent. Use `--dry-run` to inspect candidates and `--prune` only when managed notes whose source disappeared should be removed. The Windows task `Cornell KB Obsidian Sync` runs the watcher at user logon after installation.
+
 ## Deterministic lexical-index rebuild
 
 `data/lexical_index.json` is generated and ignored by Git. Rebuild it from the authoritative manifest with:

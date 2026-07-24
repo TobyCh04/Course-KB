@@ -271,7 +271,7 @@ For each new course, complete in order:
 - [ ] **Ingest** — `python scripts/source_manifest.py` (or call `ingest_manifest()`)
 - [ ] **Verify** — Search for a known fact, check source read-back
 - [ ] **Generate notes** — Run note generator for each lecture
-- [ ] **Sync to Obsidian** — Verify notes appear in vault
+- [ ] **Sync to Obsidian** — Run `python scripts/ops/obsidian_sync.py --once` or keep `--watch` running; verify notes appear under the registered course path
 
 ---
 
