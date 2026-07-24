@@ -14,6 +14,15 @@ def test_detect_input_kind_routes_supported_inputs():
     assert detect_input_kind(Path("notes.md")) == "text"
 
 
+def test_process_one_rejects_unknown_binary_input(tmp_path):
+    source = tmp_path / "blob.bin"
+    source.write_bytes(b"\x00\xff\x00")
+
+    import pytest
+    with pytest.raises(ValueError, match="Unsupported input type"):
+        process_one(source, tmp_path / "artifacts")
+
+
 def test_process_one_audio_creates_hash_bound_artifact(tmp_path):
     source = tmp_path / "lecture.wav"
     source.write_bytes(b"synthetic audio")

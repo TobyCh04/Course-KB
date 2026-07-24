@@ -349,7 +349,37 @@ def build_generation_candidate_pool(
         }
 
     if union_count > candidate_limit:
-        return list(union.values())[:candidate_limit], {
+        source_orders: dict[str, list[str]] = {"dense": [], "lexical": []}
+        for source_name, results in (("dense", dense_results), ("lexical", lexical_results)):
+            seen_source: set[str] = set()
+            for item in results:
+                can = item.get("canonical_uri") or item.get("uri", "")
+                if can and can in union and can not in seen_source:
+                    source_orders[source_name].append(can)
+                    seen_source.add(can)
+
+        selected: list[dict[str, Any]] = []
+        selected_keys: set[str] = set()
+        offsets = {"dense": 0, "lexical": 0}
+        while len(selected) < candidate_limit:
+            progressed = False
+            for source_name in ("dense", "lexical"):
+                order = source_orders[source_name]
+                while offsets[source_name] < len(order) and order[offsets[source_name]] in selected_keys:
+                    offsets[source_name] += 1
+                if offsets[source_name] >= len(order):
+                    continue
+                can = order[offsets[source_name]]
+                offsets[source_name] += 1
+                selected.append(union[can])
+                selected_keys.add(can)
+                progressed = True
+                if len(selected) >= candidate_limit:
+                    break
+            if not progressed:
+                break
+
+        return selected, {
             "policy": f"union_top{candidate_limit}_no_rrf",
             "candidate_union_count": union_count,
             "candidate_limit": candidate_limit,

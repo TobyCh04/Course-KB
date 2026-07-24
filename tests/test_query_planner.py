@@ -348,6 +348,28 @@ def test_orchestrator_passes_validated_filters_to_hindsight(tmp_path):
     assert execution["filters"] == calls[0][2]
 
 
+def test_orchestrator_returns_hindsight_results_at_top_level(tmp_path):
+    import json
+
+    backend = CornellOpenVikingBackend(FakeClient())
+    response = _response(
+        intent="personal_memory",
+        backends=["hindsight"],
+        queries=[{"text": "kanban", "role": "lexical"}],
+    )
+    planning = QueryPlanner(lambda prompt: json.dumps(response)).plan("kanban")
+
+    result = execute_planned_query(
+        planning,
+        backend,
+        index_path=tmp_path / "index.json",
+        hindsight_recall=lambda query, limit, *, filters: {"results": [{"text": "memory"}]},
+    )
+
+    assert result["results"] == [{"text": "memory", "backend": "hindsight", "query": "kanban"}]
+    assert result["hindsight_results"] == result["results"]
+
+
 def test_orchestrator_defaults_to_rrf_even_when_plan_requests_rerank(tmp_path):
     backend = CornellOpenVikingBackend(FakeClient())
     calls = []

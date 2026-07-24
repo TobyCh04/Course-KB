@@ -168,6 +168,8 @@ class LexicalIndex:
         filters: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Return top lexical matches with BM25 scores and safe metadata filters."""
+        if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k < 1:
+            raise ValueError("top_k must be positive")
         if not self.bm25 or not self.corpus_tokens:
             return []
         query_tokens = _tokenize(query)
@@ -283,6 +285,7 @@ def build_lexical_index(
             course=uri_course,
             source_type=uri_source_type,
             root=root,
+            source_hash=provided_fields.get("source_hash"),
         )
         uri = f"{uri}/{Path(uri_source_path).name}"
         corpus_tokens.append(tokens)

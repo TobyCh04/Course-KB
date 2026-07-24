@@ -22,8 +22,7 @@ if str(_sys_root) not in _sys.path:
     _sys.path.insert(0, str(_sys_root))
 
 try:
-    from ..retrieval.hybrid_retrieval import save_index
-    from ..retrieval.lexical_index import LexicalIndex, build_lexical_index
+    from ..retrieval.lexical_index import LexicalIndex, build_lexical_index, save_index
     from ..core.openviking_backend import (
         AUDIO_EXTENSIONS,
         CORNELL_NAMESPACE,
@@ -32,6 +31,7 @@ try:
         resource_uri,
     )
 except ImportError:  # pragma: no cover - direct CLI use
+    from scripts.retrieval.lexical_index import LexicalIndex, build_lexical_index, save_index
     from scripts.core.openviking_backend import (
         AUDIO_EXTENSIONS,
         CORNELL_NAMESPACE,

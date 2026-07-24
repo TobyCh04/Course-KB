@@ -42,6 +42,7 @@ def execute_planned_query(
     if max_sources < 1:
         raise ValueError("max_sources must be positive")
     merged: dict[str, dict[str, Any]] = {}
+    hindsight_results: list[dict[str, Any]] = []
     generation_metadata: dict[str, Any] | None = None
 
     def merge_result(result: dict[str, Any], provenance: list[str]) -> None:
@@ -136,10 +137,17 @@ def execute_planned_query(
                         filters=plan.filters.to_dict(),
                     )
                     if isinstance(memories, dict):
-                        record["result_count"] = len(memories.get("results", []))
+                        memory_items = memories.get("results", [])
+                        record["result_count"] = len(memory_items)
                     else:
-                        record["result_count"] = len(memories) if isinstance(memories, list) else 0
+                        memory_items = memories if isinstance(memories, list) else []
+                        record["result_count"] = len(memory_items)
                     record["memories"] = memories
+                    for item in memory_items:
+                        normalized = dict(item) if isinstance(item, dict) else {"value": item}
+                        normalized.setdefault("backend", "hindsight")
+                        normalized.setdefault("query", planned_query.text)
+                        hindsight_results.append(normalized)
                 else:
                     raise RuntimeError(f"unsupported execution backend: {backend_name}")
                 record["status"] = "completed"
@@ -186,7 +194,9 @@ def execute_planned_query(
         "candidate_selection": generation_metadata.get("candidate_selection", {}) if generation_metadata else {},
         "l2_read_contract": generation_metadata.get("l2_read_contract", {}) if generation_metadata else {},
         "generation_guidance": generation_guidance,
-        "results": final_sources,
+        "openviking_results": final_sources,
+        "hindsight_results": hindsight_results,
+        "results": final_sources if final_sources else hindsight_results,
     }
 
 

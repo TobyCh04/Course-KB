@@ -186,6 +186,29 @@ def test_dedupe_by_canonical_uri_keeps_highest_scoring_chunk():
     assert deduped[1]["uri"].endswith("single.md")
 
 
+def test_generation_union_cap_preserves_dense_and_lexical_only_candidates():
+    dense = [
+        {"uri": f"{CORNELL_NAMESPACE}/dense-{index}", "score": 1.0 - index / 100}
+        for index in range(20)
+    ]
+    lexical = [
+        {"uri": f"{CORNELL_NAMESPACE}/lexical-{index}", "score": 1.0 - index / 100}
+        for index in range(20)
+    ]
+
+    candidates, cutoff = hr.build_generation_candidate_pool(
+        dense,
+        lexical,
+        candidate_limit=16,
+        use_rrf=False,
+    )
+
+    assert cutoff["policy"] == "union_top16_no_rrf"
+    assert len(candidates) == 16
+    assert any(item["uri"].endswith("lexical-0") for item in candidates)
+    assert any(item["uri"].endswith("dense-0") for item in candidates)
+
+
 def test_hybrid_search_routes_distinct_dense_and_lexical_queries(tmp_path, monkeypatch):
     backend = CornellOpenVikingBackend(FakeSearchClient())
     index_path = _write_lexical_index(tmp_path, {})

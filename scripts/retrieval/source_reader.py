@@ -109,9 +109,16 @@ def read_selected_generation_sources(
             source_tokens = 0
             source_truncated = False
             for node in l2_nodes:
+                remaining_chars = max_chars_per_source - used_chars
+                if remaining_chars <= 0:
+                    source_truncated = True
+                    break
                 uri = str(node["uri"])
-                raw = backend.read(uri, limit=max_chars_per_source)
+                raw = backend.read(uri, limit=remaining_chars)
                 text = raw if isinstance(raw, str) else str(raw)
+                if len(text) > remaining_chars:
+                    text = text[:remaining_chars]
+                    source_truncated = True
                 remaining_tokens = max_total_tokens - result["l2_content_tokens"]
                 text, token_count, was_truncated = _truncate_to_tokens(text, remaining_tokens)
                 if not text:

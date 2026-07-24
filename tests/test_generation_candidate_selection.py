@@ -322,3 +322,37 @@ def test_selected_l2_reader_enforces_total_token_budget():
     assert result["truncated"] is True
     assert result["sources"][0]["content_tokens"] <= 25
     assert result["sources"][0]["truncated"] is True
+
+
+def test_selected_l2_reader_enforces_aggregate_source_character_budget():
+    class Client:
+        def __init__(self):
+            self.limits = []
+
+        def ls(self, uri, *, recursive, node_limit):
+            return [
+                {"name": "chunk_1.md", "uri": f"{uri}/chunk_1.md", "isDir": False},
+                {"name": "chunk_2.md", "uri": f"{uri}/chunk_2.md", "isDir": False},
+            ]
+
+    class Backend:
+        def __init__(self):
+            self.client = Client()
+
+        def read(self, uri, *, limit):
+            self.client.limits.append(limit)
+            return "x" * 100
+
+    root = "viking://resources/cornell-kb/doc"
+    backend = Backend()
+    result = read_selected_generation_sources(
+        backend,
+        [{"candidate_id": "C01", "canonical_uri": root}],
+        ["C01"],
+        max_chars_per_source=120,
+        max_total_tokens=1000,
+    )
+
+    assert result["sources"][0]["content_chars"] <= 120
+    assert result["sources"][0]["truncated"] is True
+    assert backend.client.limits == [120, 20]

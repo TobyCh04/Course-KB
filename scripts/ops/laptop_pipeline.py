@@ -174,6 +174,8 @@ def process_one(
     source = Path(source)
 
     kind = detect_input_kind(source)
+    if kind == "unknown":
+        raise ValueError(f"Unsupported input type: {source}")
     source_hash = _sha256_file(source)
     index_path = _deterministic_output_path(source, output_dir, kind, source_hash)
 

@@ -145,6 +145,14 @@ class SourceHashMismatch(ValueError):
     """
 
 
+class ResourceInventoryUnavailable(RuntimeError):
+    """Raised when strict source protection cannot inspect OpenViking inventory."""
+
+
+class AmbiguousUriRepair(ValueError):
+    """Raised when a stale filename matches multiple OpenViking resources."""
+
+
 @dataclass(frozen=True)
 class IndexedResource:
     """The safe, auditable description of one indexing operation."""
@@ -167,7 +175,7 @@ def is_audio_path(path: str | Path) -> bool:
     return Path(path).suffix.lower() in AUDIO_EXTENSIONS
 
 
-def validate_source_path(path: str | Path) -> Path:
+def validate_source_path(path: str | Path, *, root: str | Path | None = None) -> Path:
     """Validate a source without reading or uploading it."""
     source = Path(path).expanduser()
     if is_audio_path(source):
@@ -180,7 +188,16 @@ def validate_source_path(path: str | Path) -> Path:
         )
     if not source.is_file():
         raise FileNotFoundError(source)
-    return source.resolve()
+    resolved = source.resolve()
+    if root is not None:
+        base = Path(root).expanduser().resolve()
+        try:
+            resolved.relative_to(base)
+        except ValueError as error:
+            raise UnsupportedSource(
+                f"Source is outside configured root {base}: {resolved}"
+            ) from error
+    return resolved
 
 
 def resource_uri(
@@ -271,11 +288,13 @@ class CornellOpenVikingBackend:
         base_url: str = DEFAULT_OPENVIKING_URL,
         root: str | Path | None = None,
         timeout: float = 1800,
+        strict_inventory: bool | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.root = Path(root).expanduser().resolve() if root else None
         self.timeout = timeout
         self._client = client
+        self._strict_inventory = client is None if strict_inventory is None else strict_inventory
         self._uri_repair_cache: dict[str, str | None] = {}
         self._resource_files_cache: list[dict[str, Any]] | None = None
         self._manifest_metadata = self._load_manifest_metadata()
@@ -361,7 +380,13 @@ class CornellOpenVikingBackend:
         provenance_source_path: str | Path | None = None,
         dry_run: bool = False,
     ) -> IndexedResource:
-        path = validate_source_path(source)
+        path = validate_source_path(source, root=self.root)
+        if not isinstance(source_type, str) or not source_type.strip():
+            raise ValueError("source_type must be non-empty text")
+        if lecture is not None and (
+            not isinstance(lecture, int) or isinstance(lecture, bool) or not 1 <= lecture <= 1000
+        ):
+            raise ValueError("lecture must be an integer between 1 and 1000")
         safe_metadata = _safe_metadata(metadata)
         safe_metadata.update({
             "course": course,
@@ -427,6 +452,8 @@ class CornellOpenVikingBackend:
             args=provenance,
             preserve_structure=True,
         )
+        self._resource_files_cache = None
+        self._uri_repair_cache.clear()
         return IndexedResource(str(path), uri, source_type, course, lecture, safe_metadata, result)
 
     def index_tree(
@@ -472,7 +499,12 @@ class CornellOpenVikingBackend:
                 for item in children or []:
                     if not item.get("isDir") and item.get("uri"):
                         files.append(item)
-        except Exception:
+        except Exception as error:
+            self._resource_files_cache = None
+            if self._strict_inventory:
+                raise ResourceInventoryUnavailable(
+                    f"Unable to inspect OpenViking resource inventory: {error}"
+                ) from error
             files = []
         # De-duplicate tree entries returned by different SDK traversal modes.
         unique: dict[str, dict[str, Any]] = {item["uri"]: item for item in files}
@@ -516,7 +548,12 @@ class CornellOpenVikingBackend:
             item["uri"] for item in files
             if str(item.get("name", "")).casefold().rsplit(".", 1)[0].startswith(requested_stem)
         ]
-        repaired = next(iter(exact or stem_matches or prefix_matches), None)
+        matches = list(dict.fromkeys(exact or stem_matches or prefix_matches))
+        if len(matches) > 1:
+            raise AmbiguousUriRepair(
+                f"URI repair is ambiguous for {uri!r}: {len(matches)} matching resources"
+            )
+        repaired = matches[0] if matches else None
         self._uri_repair_cache[uri] = repaired
         return repaired
 
@@ -697,7 +734,9 @@ __all__ = [
     "CORNELL_NAMESPACE",
     "CornellOpenVikingBackend",
     "AudioSourceRejected",
+    "AmbiguousUriRepair",
     "IndexedResource",
+    "ResourceInventoryUnavailable",
     "SUPPORTED_EXTENSIONS",
     "CURATED_SOURCE_PATHS",
     "SourceHashMismatch",

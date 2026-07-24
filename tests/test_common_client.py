@@ -43,3 +43,37 @@ def test_json_http_client_retries_transient_failure_with_exponential_backoff():
         ("https://example.test/endpoint", 11),
     ]
     assert delays == [0.25, 0.5]
+
+
+def test_json_http_client_retries_rate_limit_and_honors_retry_after():
+    from email.message import Message
+    from urllib.error import HTTPError
+
+    from scripts.core.common_client import JsonHttpClient
+
+    attempts = []
+    delays = []
+
+    class Response:
+        def read(self):
+            return b'{"ok": true}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def opener(request, timeout):
+        attempts.append(request.full_url)
+        if len(attempts) == 1:
+            headers = Message()
+            headers["Retry-After"] = "3"
+            raise HTTPError(request.full_url, 429, "busy", headers, None)
+        return Response()
+
+    client = JsonHttpClient(opener=opener, retries=1, backoff_seconds=0.25, sleep=delays.append)
+
+    assert client.post_json("https://example.test/endpoint", {}) == {"ok": True}
+    assert attempts == ["https://example.test/endpoint", "https://example.test/endpoint"]
+    assert delays == [3.0]

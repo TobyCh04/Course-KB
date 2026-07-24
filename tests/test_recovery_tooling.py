@@ -165,6 +165,39 @@ class TestCheckpointResume:
             assert len(result["sources"]) == 0
             assert result["_skipped_from_log"] == 1
 
+    def test_build_resume_manifest_does_not_skip_same_stem_with_different_path(self):
+        from scripts.ingestion.ingestion_logger import build_resume_manifest
+
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            first = td_path / "course_a" / "lecture.md"
+            second = td_path / "course_b" / "lecture.md"
+            first.parent.mkdir()
+            second.parent.mkdir()
+            first.write_text("first", encoding="utf-8")
+            second.write_text("second", encoding="utf-8")
+            manifest = {
+                "sources": [
+                    {"source_path": str(first), "source_hash": "a" * 64, "source_type": "lecture"},
+                    {"source_path": str(second), "source_hash": "b" * 64, "source_type": "lecture"},
+                ]
+            }
+            log_path = td_path / "log.jsonl"
+            log_path.write_text(
+                json.dumps({
+                    "status": "indexed",
+                    "uri": "viking://resources/cornell-kb/course-a/lecture/one",
+                    "source_path": str(first),
+                    "source_hash": "a" * 64,
+                }) + "\n",
+                encoding="utf-8",
+            )
+
+            result = build_resume_manifest(manifest, log_path)
+
+            assert [item["source_path"] for item in result["sources"]] == [str(second)]
+            assert result["_skipped_from_log"] == 1
+
 
 # ---------------------------------------------------------------------------
 # Resource inventory tests

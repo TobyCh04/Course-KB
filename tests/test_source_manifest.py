@@ -1,5 +1,6 @@
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -87,6 +88,35 @@ def test_build_lexical_index_from_manifest_adds_external_test_source(tmp_path):
     assert len(results) == 1
     assert results[0]["metadata"]["course"] == "TEST"
     assert results[0]["metadata"]["source_hash"] == manifest["sources"][0]["source_hash"]
+
+
+def test_rebuild_index_direct_cli_imports_its_lexical_dependencies(tmp_path):
+    source = tmp_path / "homework.txt"
+    source.write_text("kanban homework test content", encoding="utf-8")
+    manifest = _manifest_for(source, course="TEST", corpus="test")
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    index_path = tmp_path / "index.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "ingestion" / "source_manifest.py"),
+            "rebuild-index",
+            "--manifest",
+            str(manifest_path),
+            "--root",
+            str(tmp_path),
+            "--index-path",
+            str(index_path),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert index_path.is_file()
 
 
 def test_manifest_canonical_root_changes_with_authoritative_source_hash(tmp_path):

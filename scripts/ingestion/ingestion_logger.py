@@ -207,24 +207,41 @@ def read_logged_uris(log_path: str | Path) -> set[str]:
     return uris
 
 
+def _read_logged_source_keys(log_path: str | Path) -> set[tuple[str, str]]:
+    """Return exact ``(resolved source path, source hash)`` keys from indexed logs."""
+    path = Path(log_path).expanduser()
+    if not path.is_file():
+        return set()
+    keys: set[tuple[str, str]] = set()
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            source_path = entry.get("source_path")
+            source_hash = entry.get("source_hash")
+            if entry.get("status") != "indexed" or not source_path or not source_hash:
+                continue
+            keys.add((str(Path(source_path).expanduser().resolve()).casefold(), str(source_hash).casefold()))
+    return keys
+
+
 def build_resume_manifest(
     source_manifest: str | Path | dict[str, Any],
     log_path: str | Path,
 ) -> dict[str, Any]:
-    """Return a manifest with already-indexed entries filtered out.
+    """Return a manifest with exactly indexed path/hash entries filtered out.
 
-    Reads the log, extracts indexed URIs, and removes matching manifest
-    entries so that a re-run of ingest_manifest only processes remaining
-    sources.
+    Resume matching uses the source path and authoritative content hash recorded
+    in the ingestion log.  It deliberately does not use filename substrings or
+    hash fragments, which can incorrectly skip a different source with the same
+    stem.
     """
-    indexed_uris = read_logged_uris(log_path)
-    if not indexed_uris:
-        if isinstance(source_manifest, dict):
-            return source_manifest
-        return json.loads(Path(source_manifest).read_text(encoding="utf-8"))
-
-    from scripts.core.openviking_backend import CORNELL_NAMESPACE
-
+    indexed_source_keys = _read_logged_source_keys(log_path)
     if isinstance(source_manifest, dict):
         data = source_manifest
     else:
@@ -234,23 +251,18 @@ def build_resume_manifest(
     if not sources:
         return data
 
-    # Filter: keep only entries whose expected URI is NOT already logged.
     remaining = []
     skipped = 0
     for entry in sources:
-        sp = entry.get("source_path", "")
-        sh = entry.get("source_hash", "")
-        if sh and sp:
-            # The digest in the URI is a 12-char hex prefix of SHA-256.
-            # Also match by source stem to catch path changes.
-            stem = Path(sp).stem
-            already = any(
-                stem in u or (sh[:12] in u)
-                for u in indexed_uris
-            )
-            if already:
-                skipped += 1
-                continue
+        source_path = entry.get("source_path")
+        source_hash = entry.get("source_hash")
+        key = (
+            str(Path(source_path).expanduser().resolve()).casefold(),
+            str(source_hash).casefold(),
+        ) if source_path and source_hash else None
+        if key is not None and key in indexed_source_keys:
+            skipped += 1
+            continue
         remaining.append(entry)
 
     data["sources"] = remaining

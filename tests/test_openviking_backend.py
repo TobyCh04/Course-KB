@@ -16,6 +16,8 @@ from scripts.core.openviking_backend import (  # noqa: E402
     is_approved_cornell_path,
     metadata_matches,
     resource_uri,
+    ResourceInventoryUnavailable,
+    UnsupportedSource,
 )
 
 
@@ -270,6 +272,77 @@ def test_read_repairs_stale_filename_to_canonical_tree_uri():
     backend = CornellOpenVikingBackend(RepairClient())
     assert backend.read(stale) == "canonical source"
     assert backend.resolve_uri(stale) == canonical
+
+
+def test_ambiguous_uri_repair_fails_instead_of_picking_first():
+    class AmbiguousClient(FakeOpenVikingClient):
+        def ls(self, uri, **kwargs):
+            return [
+                {"isDir": True, "uri": f"{CORNELL_NAMESPACE}/course-a/source/a"},
+                {"isDir": True, "uri": f"{CORNELL_NAMESPACE}/course-b/source/b"},
+            ] if uri == CORNELL_NAMESPACE else [
+                {"isDir": False, "name": "notes.md", "uri": f"{uri}/notes.md"},
+            ]
+
+    backend = CornellOpenVikingBackend(AmbiguousClient())
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        backend.resolve_uri(f"{CORNELL_NAMESPACE}/notes.md")
+
+
+def test_inventory_failure_is_explicit_in_strict_mode():
+    class BrokenInventoryClient(FakeOpenVikingClient):
+        def ls(self, uri, **kwargs):
+            raise ConnectionError("inventory unavailable")
+
+    backend = CornellOpenVikingBackend(BrokenInventoryClient(), strict_inventory=True)
+
+    with pytest.raises(ResourceInventoryUnavailable, match="inventory unavailable"):
+        backend._resource_files()
+
+
+def test_resource_inventory_cache_is_invalidated_after_write(tmp_path):
+    source = tmp_path / "lecture.txt"
+    source.write_text("content", encoding="utf-8")
+
+    class InventoryClient(FakeOpenVikingClient):
+        def __init__(self):
+            super().__init__()
+            self.resource_root = None
+
+        def ls(self, uri, **kwargs):
+            if uri == CORNELL_NAMESPACE:
+                return (
+                    [{"isDir": True, "uri": self.resource_root}]
+                    if self.resource_root
+                    else []
+                )
+            return (
+                [{"isDir": False, "uri": f"{self.resource_root}/chunk.md"}]
+                if self.resource_root
+                else []
+            )
+
+        def add_resource(self, **kwargs):
+            result = super().add_resource(**kwargs)
+            self.resource_root = kwargs["to"]
+            return result
+
+    client = InventoryClient()
+    backend = CornellOpenVikingBackend(client, root=tmp_path)
+    assert backend._resource_files() == []
+    backend.index_file(source, source_type="lecture", source_hash="a" * 64)
+
+    assert backend._resource_files()
+
+
+def test_index_file_rejects_source_outside_configured_root(tmp_path):
+    outside = tmp_path.parent / "outside.txt"
+    outside.write_text("outside", encoding="utf-8")
+    backend = CornellOpenVikingBackend(FakeOpenVikingClient(), root=tmp_path)
+
+    with pytest.raises(UnsupportedSource, match="outside configured root"):
+        backend.index_file(outside, source_type="lecture")
 
 
 def test_unrepairable_uri_remains_missing():

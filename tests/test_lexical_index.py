@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.retrieval import lexical_index as li
+from scripts.core.openviking_backend import resource_uri
 from scripts.retrieval.lexical_index import LexicalIndex, _tokenize, build_lexical_index
 
 
@@ -80,6 +81,34 @@ def test_build_lexical_index_derives_filter_metadata_from_json(tmp_path):
     assert "/uncategorized/cornell-source/" in index.uris[0]
 
 
+def test_manifest_source_hash_is_preserved_in_lexical_uri(tmp_path):
+    doc = tmp_path / "lecture.txt"
+    doc.write_text("Kanban pull system", encoding="utf-8")
+    source_hash = "a" * 64
+
+    index = build_lexical_index(
+        tmp_path,
+        extra_files=[doc],
+        extra_metadata={
+            str(doc.resolve()): {
+                "uri_source_path": str(doc),
+                "course": "TEST",
+                "source_type": "lecture",
+                "source_hash": source_hash,
+            }
+        },
+    )
+
+    expected_root = resource_uri(
+        doc,
+        course="TEST",
+        source_type="lecture",
+        root=tmp_path,
+        source_hash=source_hash,
+    )
+    assert index.uris == [f"{expected_root}/{doc.name}"]
+
+
 def test_lexical_index_search_filters_by_metadata(tmp_path):
     first = tmp_path / "lecture_one.json"
     first.write_text(
@@ -122,6 +151,13 @@ def test_lexical_index_serialisation_roundtrip(tmp_path):
 def test_lexical_index_search_empty_query_returns_empty():
     index = LexicalIndex(corpus_tokens=[["a", "b"]], uris=["u"], abstracts=["ab"], metadata=[{}])
     assert index.search("", top_k=5) == []
+
+
+def test_lexical_index_rejects_non_positive_top_k():
+    index = LexicalIndex(corpus_tokens=[["kanban"]], uris=["u"], abstracts=["kanban"], metadata=[{}])
+
+    with pytest.raises(ValueError, match="top_k must be positive"):
+        index.search("kanban", top_k=0)
 
 
 def test_lexical_index_returns_zero_for_unmatched_query(tmp_path):

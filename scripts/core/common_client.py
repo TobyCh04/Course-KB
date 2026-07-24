@@ -100,6 +100,7 @@ class JsonHttpClient:
             raise ValueError("retries cannot be negative")
 
         for attempt in range(attempts + 1):
+            retry_delay = self.backoff_seconds * (2**attempt)
             try:
                 response = self._open(request, request_timeout)
                 with response:
@@ -112,8 +113,12 @@ class JsonHttpClient:
                 if attempt == attempts:
                     raise
             except urllib.error.HTTPError as error:
-                if 500 <= error.code < 600 and attempt < attempts:
-                    pass
+                if error.code == 429 or 500 <= error.code < 600:
+                    if attempt < attempts:
+                        retry_delay = self._retry_after_delay(error, attempt)
+                    else:
+                        detail = error.read().decode("utf-8", errors="replace")[:500]
+                        raise HttpClientError(f"HTTP {error.code} from {url}: {detail}") from error
                 else:
                     detail = error.read().decode("utf-8", errors="replace")[:500]
                     raise HttpClientError(f"HTTP {error.code} from {url}: {detail}") from error
@@ -121,9 +126,21 @@ class JsonHttpClient:
                 if attempt == attempts:
                     raise TransientHttpError(f"Request to {url} failed after {attempt + 1} attempts: {error}") from error
             if attempt < attempts:
-                self._sleep(self.backoff_seconds * (2**attempt))
+                self._sleep(retry_delay)
 
         raise AssertionError("unreachable")
+
+    def _retry_after_delay(self, error: urllib.error.HTTPError, attempt: int) -> float:
+        """Return a bounded retry delay, honoring numeric Retry-After values."""
+        retry_after = error.headers.get("Retry-After") if error.headers else None
+        if retry_after is not None:
+            try:
+                delay = float(retry_after)
+                if delay >= 0:
+                    return delay
+            except (TypeError, ValueError):
+                pass
+        return self.backoff_seconds * (2**attempt)
 
     def _open(self, request: urllib.request.Request, timeout: float) -> Any:
         open_method = getattr(self._opener, "open", None)
