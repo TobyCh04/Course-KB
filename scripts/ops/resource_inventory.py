@@ -75,7 +75,6 @@ def snapshot(
     ``_fake_files`` directly on the backend's client attribute.
     """
     from datetime import datetime, timezone
-    from scripts.core.openviking_backend import CornellOpenVikingBackend
     from openviking_sdk import SyncHTTPClient
 
     if client is None:

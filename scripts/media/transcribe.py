@@ -4,7 +4,6 @@ _sys_root = _Path(__file__).resolve().parents[2]
 if str(_sys_root) not in _sys.path:
     _sys.path.insert(0, str(_sys_root))
 
-import sys
 import os
 import argparse
 import base64
@@ -376,5 +375,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
-
-import sys

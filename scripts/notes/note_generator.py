@@ -21,13 +21,10 @@ Usage:
     python note_generator.py --facts data/Test_facts.json --course "SYSEN 5100" --lecture 1 --no-fact-check
 """
 
-import sys
-
 import argparse
 import json
 import os
 import sys
-import urllib.request
 import datetime
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -243,98 +240,6 @@ Rules:
 - Generate appropriate tags based on the content topics
 - Generate wikilinks to related concepts
 """
-
-FACT_CHECK_PROMPT = """You are verifying the accuracy of generated lecture notes against original source materials. Be thorough but fair — only flag genuine issues, not stylistic differences.
-
-## Generated Notes
-{note_text}
-
-## Original Sources
-
-### Transcript:
-{transcript_text}
-
-### Extracted Facts:
-{facts_text}
-
-### Diagram Descriptions:
-{diagrams_text}
-
-## Verification Tasks
-
-1. **Formulas**: For each formula in the notes:
-   - Is it complete (not truncated)?
-   - Are variables correctly defined?
-   - Is LaTeX notation accurate?
-   - Any OCR misreads (1 vs l, 0 vs O, θ vs 0)?
-   - Does the formula match what's in the source?
-
-2. **Definitions**: For each definition:
-   - Is it complete and accurate?
-   - Are important qualifiers missing?
-   - Does it match what was actually said in the source?
-
-3. **Key Concepts**: For each concept:
-   - Is the explanation accurate and complete?
-   - Are any important aspects missing or misrepresented?
-   - Does it match what was actually taught?
-
-4. **Examples**: For each example:
-   - Are details accurate?
-   - Are key details missing or altered?
-   - Does it match what was described in the source?
-
-5. **Diagrams**: For each diagram description:
-   - Is the description accurate based on the OCR source?
-   - Are components, labels, and relationships correct?
-   - Any OCR misreads in the diagram (labels, values, arrows)?
-
-6. **Cross-reference**: Are transcript and slide content consistent? Flag any contradictions.
-
-## Output Format
-
-Use this EXACT format:
-
----VERIFICATION---
-FORMULAS:
-✅ [formula from notes] — matches source [reference]
-⚠️ [formula from notes] — [specific concern]
-❌ [formula from notes] — [specific problem]
-
-DEFINITIONS:
-✅ [term from notes] — matches source [reference]
-⚠️ [term from notes] — [specific concern]
-❌ [term from notes] — [specific problem]
-
-KEY CONCEPTS:
-✅ [concept from notes] — matches source [reference]
-⚠️ [concept from notes] — [specific concern]
-❌ [concept from notes] — [specific problem]
-
-EXAMPLES:
-✅ [example from notes] — matches source [reference]
-⚠️ [example from notes] — [specific concern]
-❌ [example from notes] — [specific problem]
-
-DIAGRAMS:
-✅ [diagram from notes] — matches OCR source [reference]
-⚠️ [diagram from notes] — [specific concern]
-❌ [diagram from notes] — [specific problem]
-
-CROSS-REFERENCES:
-✅ Transcript and slides are consistent on [topic]
-⚠️ [any inconsistencies between transcript and slides]
-
-SUMMARY:
-- Total items checked: N
-- Verified: N
-- Needs check: N
-- Issues: N
----END---
-
-Be specific. Quote the relevant source text when flagging an issue. Only use ✅, ⚠️, or ❌.
-"""
-
 
 def format_facts_for_prompt(facts):
     """Format chunked facts into a readable string for the prompt."""
@@ -708,22 +613,21 @@ Be concise. Output ONE line:
 
 def web_search_ddg(query, num_results=5):
     """Search DuckDuckGo Instant Answer API + Wikipedia. No API key needed, no CAPTCHA."""
-    import urllib.parse
+    from urllib import parse, request
     results = []
 
     # Source 1: DuckDuckGo Instant Answer API (returns abstract + related topics)
-    params = urllib.parse.urlencode({
+    params = parse.urlencode({
         "q": query, "format": "json", "no_redirect": "1", "no_html": "1"
     })
     url = f"https://api.duckduckgo.com/?{params}"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    req = request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
 
         # Abstract (usually from Wikipedia)
         abstract = data.get("Abstract", "").strip()
-        source_url = data.get("AbstractURL", "")
         if abstract:
             results.append(f"[{data.get('AbstractSource', 'Wikipedia')}] {abstract}")
 
@@ -743,14 +647,14 @@ def web_search_ddg(query, num_results=5):
         wiki_query = re.sub(r'\\[a-zA-Z]+', '', wiki_query)
         wiki_query = re.sub(r'[^a-zA-Z0-9 ]', ' ', wiki_query).strip()
         if len(wiki_query) > 5:
-            wiki_params = urllib.parse.urlencode({
+            wiki_params = parse.urlencode({
                 "action": "query", "list": "search", "srsearch": wiki_query,
                 "srlimit": str(num_results - len(results)), "format": "json"
             })
             wiki_url = f"https://en.wikipedia.org/w/api.php?{wiki_params}"
-            wiki_req = urllib.request.Request(wiki_url, headers={"User-Agent": "Mozilla/5.0"})
+            wiki_req = request.Request(wiki_url, headers={"User-Agent": "Mozilla/5.0"})
             try:
-                with urllib.request.urlopen(wiki_req, timeout=15) as resp:
+                with request.urlopen(wiki_req, timeout=15) as resp:
                     wiki_data = json.loads(resp.read())
                 for item in wiki_data.get("query", {}).get("search", []):
                     # Clean HTML from snippet
@@ -868,37 +772,6 @@ def web_verify_items(verification_text, backend=DEFAULT_BACKEND, model=None,
         for section, claim, result in web_results:
             verification_text += f"**[{section}]** {claim}\n→ {result}\n\n"
     return verification_text, web_results
-
-
-def fact_check_note(note_text, transcript_text, facts_text, diagrams_text,
-                    backend=DEFAULT_BACKEND, model=None, api_key=None, api_url=None):
-    """Run a fact-check pass on the generated note against raw sources."""
-    prompt = FACT_CHECK_PROMPT.format(
-        note_text=note_text,
-        transcript_text=transcript_text or "(no transcript provided)",
-        facts_text=facts_text or "(no facts provided)",
-        diagrams_text=diagrams_text or "(no diagrams provided)",
-    )
-
-    print("  Running fact-check pass...")
-    try:
-        result = call_llm(prompt, backend=backend, model=model,
-                          api_key=api_key, api_url=api_url)
-        # Strip code block wrapper if present
-        if result.startswith("```markdown\n"):
-            result = result[len("```markdown\n"):]
-        if result.startswith("```\n"):
-            result = result[len("```\n"):]
-        if result.endswith("\n```"):
-            result = result[:-len("\n```")]
-        # Strip verification delimiters if present
-        if "---VERIFICATION---" in result:
-            result = result.split("---VERIFICATION---", 1)[1]
-        if "---END---" in result:
-            result = result.split("---END---")[0]
-        return result.strip()
-    except Exception as e:
-        return f"Fact-check failed: {e}"
 
 
 def parse_verification_summary(verification_text):

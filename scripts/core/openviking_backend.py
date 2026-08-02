@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Protocol
+from typing import Any, Protocol
 
 CORNELL_NAMESPACE = "viking://resources/cornell-kb"
 DEFAULT_OPENVIKING_URL = "http://127.0.0.1:1934"
@@ -671,24 +671,6 @@ def _provenance_args(
             if metadata.get(key) is not None:
                 provenance[key] = metadata[key]
     return provenance
-
-
-def _reason(
-    source_type: str,
-    course: str | None,
-    lecture: int | None,
-    metadata: dict[str, Any] | None = None,
-) -> str:
-    details = ["Cornell KB source ingestion", f"source_type={source_type}"]
-    if course:
-        details.append(f"course={course}")
-    if lecture is not None:
-        details.append(f"lecture {lecture}")
-    if metadata:
-        for key in ("semester", "date", "corpus", "source_hash"):
-            if metadata.get(key) is not None:
-                details.append(f"{key}={metadata[key]}")
-    return " — ".join(details)
 
 
 def _ignored_path(path: Path, root: Path) -> bool:

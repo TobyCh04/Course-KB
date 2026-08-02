@@ -40,9 +40,6 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 sys.path.insert(0, str(_SCRIPT_DIR))
 
 from scripts.ingestion.media_artifact import (
-    DOWNSTREAM_STATUSES,
-    EXTRACTION_ENGINES,
-    ArtifactRecord,
     make_artifact,
     validate_artifact,
 )

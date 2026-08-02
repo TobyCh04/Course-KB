@@ -20,8 +20,6 @@ The log file is line-delimited JSON, safe for append-only concurrent writers.
 from __future__ import annotations
 
 import json
-import os
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path

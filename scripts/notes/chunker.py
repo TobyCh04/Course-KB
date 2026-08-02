@@ -80,22 +80,6 @@ Transcript segment:
 """
 
 
-def call_deepseek(
-    prompt: str,
-    model: str = DEFAULT_MODEL,
-    api_key: str | None = None,
-    api_url: str | None = None,
-    *,
-    timeout: float = 600,
-    client: DeepSeekClient | None = None,
-) -> str:
-    """Call DeepSeek once; retry policy belongs to the chunk worker."""
-    if model != DEFAULT_MODEL:
-        raise ValueError(f"Cornell-KB requires {DEFAULT_MODEL}; got {model!r}")
-    active_client = client or DeepSeekClient(api_key=api_key, api_url=api_url or DEEPSEEK_URL, timeout=timeout)
-    return active_client.complete(prompt, model=model)
-
-
 def split_transcript(text: str, max_chars: int = 3000) -> list[str]:
     """Split a transcript by timestamp lines while targeting a segment size."""
     if max_chars < 1:

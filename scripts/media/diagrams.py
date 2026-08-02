@@ -11,7 +11,6 @@ import hashlib
 import io
 import json
 import os
-import sys
 import tempfile
 import urllib.request
 
@@ -26,7 +25,6 @@ Usage:
     python diagrams.py lecture_slides.pdf --output diagram_facts.json
 """
 
-import sys
 try:
     from ..core.common_client import JsonHttpClient
     from ..core.model_availability import ensure_ollama_available

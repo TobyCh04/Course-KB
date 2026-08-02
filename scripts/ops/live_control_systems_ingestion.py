@@ -21,7 +21,6 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.core.openviking_backend import (  # noqa: E402
-    CORNELL_NAMESPACE,
     CornellOpenVikingBackend,
     canonical_resource_root,
     resource_uri,

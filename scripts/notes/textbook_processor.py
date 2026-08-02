@@ -32,19 +32,16 @@ if str(_sys_root) not in _sys.path:
 import argparse
 import hashlib
 import json
-import os
 import re
-import sys
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 try:
-    from ..core.common_client import DeepSeekClient, JsonHttpClient, load_api_key
+    from ..core.common_client import JsonHttpClient, load_api_key
     from ..ingestion.ingestion.ingest import format_fact_tags, hindsight_retain_items
 except ImportError:  # pragma: no cover - direct CLI use
-    from scripts.core.common_client import DeepSeekClient, JsonHttpClient, load_api_key
+    from scripts.core.common_client import JsonHttpClient, load_api_key
     from scripts.ingestion.ingest import format_fact_tags, hindsight_retain_items
 
 # ── Configuration ───────────────────────────────────────────────────────────

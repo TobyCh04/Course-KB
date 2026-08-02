@@ -13,7 +13,7 @@ try:
         build_source_selection_guidance,
         select_final_sources,
     )
-    from ..retrieval.query_models import PlanningResult, QueryPlan, QueryTrace
+    from ..retrieval.query_models import PlanningResult, QueryPlan
 except ImportError:  # pragma: no cover - exercised by direct CLI use
     from scripts.core.openviking_backend import CORNELL_NAMESPACE, CornellOpenVikingBackend
     from scripts.retrieval.hybrid_retrieval import (
@@ -21,7 +21,7 @@ except ImportError:  # pragma: no cover - exercised by direct CLI use
         build_source_selection_guidance,
         select_final_sources,
     )
-    from scripts.retrieval.query_models import PlanningResult, QueryPlan, QueryTrace
+    from scripts.retrieval.query_models import PlanningResult, QueryPlan
 
 HindsightRecall = Callable[..., Any]
 

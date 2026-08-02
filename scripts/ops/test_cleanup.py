@@ -97,7 +97,7 @@ def _collect_from_manifest(
         if test_only and entry.get("corpus") != "test":
             continue
         # Compute the URI using resource_uri so it matches what was ingested.
-        from scripts.ingestion.source_manifest import _canonical_resource_uri, _resolve_path
+        from scripts.ingestion.source_manifest import _canonical_resource_uri
         from pathlib import Path as P
 
         root = P(".").resolve()

@@ -6,13 +6,12 @@ lecture metadata optional for homework, exams, and multi-lecture materials.
 """
 
 from __future__ import annotations
-import sys
 import argparse
 import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 
 import sys as _sys
@@ -25,7 +24,6 @@ try:
     from ..retrieval.lexical_index import LexicalIndex, build_lexical_index, save_index
     from ..core.openviking_backend import (
         AUDIO_EXTENSIONS,
-        CORNELL_NAMESPACE,
         CornellOpenVikingBackend,
         is_approved_cornell_path,
         resource_uri,
@@ -34,7 +32,6 @@ except ImportError:  # pragma: no cover - direct CLI use
     from scripts.retrieval.lexical_index import LexicalIndex, build_lexical_index, save_index
     from scripts.core.openviking_backend import (
         AUDIO_EXTENSIONS,
-        CORNELL_NAMESPACE,
         CornellOpenVikingBackend,
         is_approved_cornell_path,
         resource_uri,

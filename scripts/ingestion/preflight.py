@@ -21,12 +21,10 @@ Every check is injectable so tests never contact live services.
 """
 
 from __future__ import annotations
-import sys
 import argparse
 import json
 import os
 import subprocess
-import sys
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,27 +38,23 @@ if str(_sys_root) not in _sys.path:
     _sys.path.insert(0, str(_sys_root))
 
 try:
-    from ..core.common_client import JsonHttpClient, load_api_key
+    from ..core.common_client import load_api_key
     from ..core.openviking_backend import (
         CORNELL_NAMESPACE,
         DEFAULT_OPENVIKING_URL,
-        CornellOpenVikingBackend,
-        SourceHashMismatch,
         _logical_source_key,
         canonical_resource_root,
     )
-    from ..ingestion.ingestion.source_manifest import _canonical_resource_uri, _entries, _metadata_for_entry, load_manifest, validate_manifest
+    from ..ingestion.ingestion.source_manifest import _canonical_resource_uri, _entries, load_manifest, validate_manifest
 except ImportError:  # pragma: no cover — direct CLI use
-    from scripts.core.common_client import JsonHttpClient, load_api_key
+    from scripts.core.common_client import load_api_key
     from scripts.core.openviking_backend import (
         CORNELL_NAMESPACE,
         DEFAULT_OPENVIKING_URL,
-        CornellOpenVikingBackend,
-        SourceHashMismatch,
         _logical_source_key,
         canonical_resource_root,
     )
-    from scripts.ingestion.source_manifest import _canonical_resource_uri, _entries, _metadata_for_entry, load_manifest, validate_manifest
+    from scripts.ingestion.source_manifest import _canonical_resource_uri, _entries, load_manifest, validate_manifest
 
 HINDSIGHT_URL = os.environ.get("CORNELL_KB_HINDSIGHT_URL", "http://localhost:8888")
 EMBEDDING_URL = os.environ.get("CORNELL_KB_EMBEDDING_URL", "http://100.104.205.105:8001")

@@ -25,18 +25,14 @@ from rank_bm25 import BM25Okapi, BM25Plus
 # Re-use the corpus policy and deterministic URI builder from the OpenViking backend.
 try:
     from ..core.openviking_backend import (
-        CORNELL_NAMESPACE,
         CURATED_SOURCE_PATHS,
-        is_approved_cornell_path,
         metadata_matches,
         resource_uri,
         validate_metadata_filters,
     )
 except ImportError:  # pragma: no cover - exercised by direct CLI use
     from scripts.core.openviking_backend import (
-        CORNELL_NAMESPACE,
         CURATED_SOURCE_PATHS,
-        is_approved_cornell_path,
         metadata_matches,
         resource_uri,
         validate_metadata_filters,

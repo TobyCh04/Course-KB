@@ -1,8 +1,16 @@
 # Cornell-KB Project Status
 
-**Last updated:** 2026-07-23
+**Last updated:** 2026-07-25
 **Branch:** `master`
-**Working tree:** release changes pending commit; generated live-run outputs remain ignored
+**Working tree:** live-read gate added; generated live-run outputs remain ignored
+
+## Live-read gate (2026-07-25) ✅
+
+- New `test_runs/live_read_gate.py` — production-readiness gate wrapping the isolated e2e gate with service-health, zero-test-corpus (pre/post), and a **Stage 8 live answer-path read** through the production hybrid retrieval path (BM25 + dense RRF, no reranker).
+- First live run: **PASS** — service health 3/3, e2e gate 8/8 live, live read returned a namespace-compliant source URI (`.../E2E-TEST/textbook/.../chapter1_test.md`) in 562 ms with zero source-read failures, pre/post corpus inventories clean.
+- Evidence: `test_runs/live_read_gate_report.json`.
+- New runbook: `docs/production-readiness-runbook.md` — full preflight → cleanup → ingestion → read-back → Hindsight isolation → rollback → cleanup → live-read → Obsidian procedure with commands, evidence requirements, and acceptance criteria.
+- Full suite after changes: **331 passed**, compile clean, `git diff --check` clean.
 
 ## Completed — pre-semester hardening (2026-07-21)
 
