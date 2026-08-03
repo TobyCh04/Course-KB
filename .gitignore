@@ -1,0 +1,56 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+.env
+.env.*
+!.env.example
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.m4a
+*.mp3
+*.wav
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.log
+*.jsonl
+*.sqlite3
+.DS_Store
+Thumbs.db
+data/*.json
+# Generated BM25 index; rebuild from config/source_manifest.json.
+data/lexical_index.json
+data/artifacts/
+logs/
+
+# Local course material and per-user manifests. The checked-in manifest is a
+# synthetic fixture only; real source paths and hashes stay outside Git.
+courses/
+config/manifests/
+
+# Local model/compiler caches.
+.torch-cache/
+
+# Internal Hermes session notes and the separate Lean reference project are not
+# part of the public Cornell-KB distribution.
+.hermes/
+books/lean-implementation/
+
+# External SimpleCADAPI test inputs belong in the sibling SimpleCADAPI project
+test_models/
+
+# Generated validation artifacts
+test_runs/
+
+# Generated extraction outputs (course content — never commit)
+data/textbook_extracts/
+cornell_pdf_benchmark.txt
+
+formula_comparison.html
