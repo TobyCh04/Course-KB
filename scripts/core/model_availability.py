@@ -17,15 +17,10 @@ import urllib.error
 import urllib.request
 from typing import Any, Callable
 
-DEFAULT_SSH_TARGET = os.environ.get(
-    "CORNELL_KB_OLLAMA_SSH_TARGET", "31163@100.104.205.105"
-)
-DEFAULT_REMOTE_EXECUTABLE = os.environ.get(
-    "CORNELL_KB_OLLAMA_REMOTE_EXE",
-    r"C:\Users\31163\AppData\Local\Programs\Ollama\ollama.exe",
-)
+DEFAULT_SSH_TARGET = os.environ.get("CORNELL_KB_OLLAMA_SSH_TARGET") or None
+DEFAULT_REMOTE_EXECUTABLE = os.environ.get("CORNELL_KB_OLLAMA_REMOTE_EXE", "ollama")
 
-# Keep the SSH PTY alive for the duration of the current pipeline process.
+# Keep the Ollama process alive for the duration of the current pipeline process.
 # The list is intentionally process-local; it is not a service registry.
 _OLLAMA_PROCESSES: list[subprocess.Popen[Any]] = []
 
@@ -42,6 +37,25 @@ def _model_matches(requested: str, available: dict[str, Any]) -> bool:
     if requested in names:
         return True
     return f"{requested}:latest" in names
+
+
+def _ollama_command(ssh_target: str | None, executable: str) -> list[str]:
+    """Build a local or SSH-backed Ollama command without invoking a shell."""
+    if not executable.strip():
+        raise ValueError("Ollama executable must be non-empty")
+    if ssh_target and ssh_target.strip():
+        remote_command = f'set OLLAMA_HOST=0.0.0.0&&"{executable}" serve'
+        return [
+            "ssh",
+            "-tt",
+            "-o",
+            "ConnectTimeout=10",
+            "-o",
+            "ServerAliveInterval=30",
+            ssh_target,
+            remote_command,
+        ]
+    return [executable, "serve"]
 
 
 def probe_ollama(ollama_url: str, model: str | None = None, timeout: float = 5) -> bool:
@@ -61,31 +75,22 @@ def probe_ollama(ollama_url: str, model: str | None = None, timeout: float = 5) 
 
 
 def start_ollama(
-    ssh_target: str = DEFAULT_SSH_TARGET,
+    ssh_target: str | None = DEFAULT_SSH_TARGET,
     remote_executable: str = DEFAULT_REMOTE_EXECUTABLE,
 ) -> subprocess.Popen[Any]:
-    """Start Ollama in a PTY-backed SSH process, without persistent auto-start.
+    """Start Ollama locally or through SSH, without persistent auto-start.
 
     Windows Ollama can fail when launched with ``Start-Process`` from an SSH
-    session because the GUI initialization path is used. A foreground
-    ``ollama serve`` behind ``ssh -tt`` uses the server path reliably. The
-    returned process owns that temporary connection and remains available for
-    the current pipeline run.
+    session because the GUI initialization path is used. When
+    ``CORNELL_KB_OLLAMA_SSH_TARGET`` is set, a foreground ``ollama serve`` behind
+    ``ssh -tt`` uses the server path reliably. Otherwise the executable is
+    launched locally from ``PATH``. The returned process owns that temporary
+    runtime and remains available for the current pipeline run.
     """
-    remote_command = f'set OLLAMA_HOST=0.0.0.0&&"{remote_executable}" serve'
     creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     process = subprocess.Popen(
-        [
-            "ssh",
-            "-tt",
-            "-o",
-            "ConnectTimeout=10",
-            "-o",
-            "ServerAliveInterval=30",
-            ssh_target,
-            remote_command,
-        ],
-        # A live pipe keeps the remote PTY and foreground `ollama serve` alive.
+        _ollama_command(ssh_target, remote_executable),
+        # A live pipe keeps a remote PTY or local foreground server alive.
         # It is closed naturally when this pipeline process exits.
         stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
@@ -103,7 +108,7 @@ def ensure_ollama_available(
     timeout: float = 5,
     startup_timeout: float = 30,
     poll_interval: float = 1,
-    ssh_target: str = DEFAULT_SSH_TARGET,
+    ssh_target: str | None = DEFAULT_SSH_TARGET,
     remote_executable: str = DEFAULT_REMOTE_EXECUTABLE,
     probe: Callable[..., bool] | None = None,
     starter: Callable[..., Any] | None = None,
@@ -129,6 +134,6 @@ def ensure_ollama_available(
             raise RuntimeError(
                 f"Ollama did not become available at {ollama_url}"
                 + (f" with model {model!r}" if model else "")
-                + ". The on-demand SSH launch was attempted; no auto-start was configured."
+                + ". The on-demand launch was attempted; no auto-start was configured."
             )
         sleep_fn(max(0.05, poll_interval))

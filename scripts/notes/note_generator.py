@@ -107,7 +107,7 @@ def call_llm(prompt, backend=DEFAULT_BACKEND, model=None, api_key=None, api_url=
     resolved_key = api_key or load_api_key("DEEPSEEK_API_KEY")
     if not resolved_key:
         print("Error: DEEPSEEK_API_KEY is not set")
-        print("Set it via env var or in ~/AppData/Local/hermes/.env")
+        print("Set it via the environment or the configured Cornell-KB env file")
         sys.exit(1)
 
     client = deepseek_client or DeepSeekClient(

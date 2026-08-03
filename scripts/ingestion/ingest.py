@@ -1,9 +1,9 @@
 """Cornell KB Hindsight ingestion with batched, retryable retain requests.
 
 Usage:
-    python ingest.py transcript_facts.json --batch-size 20
-    python ingest.py transcript_facts.json --dry-run
-    python ingest.py --from-transcript transcript.txt --course "SYSEN 5100" --lecture 1
+    python -m scripts.ingestion.ingest transcript_facts.json --batch-size 20
+    python -m scripts.ingestion.ingest transcript_facts.json --dry-run
+    python -m scripts.ingestion.ingest --from-transcript transcript.txt --course "SYSEN 5100" --lecture 1
 """
 
 from __future__ import annotations

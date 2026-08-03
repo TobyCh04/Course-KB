@@ -14,7 +14,7 @@ Make OpenViking the source-grounded retrieval backend for `cornell-kb`, while re
 ## Current Status — 2026-07-20
 
 - Cornell-safe OpenViking adapter implemented with namespace checks, provenance metadata, dry-run support, injectable clients, and offline tests.
-- Audio and raw book binaries are excluded from future ingestion. Previously indexed `Test.m4a` and `books/lean-implementation/full_text.txt` were removed.
+- Audio and raw book binaries are excluded from future ingestion. Previously indexed test media and unrelated reference material were removed.
 - Production OpenViking remains the small-model embedding index on mini-PC port `1934`; its active VLM is `deepseek-v4-pro` through `https://api.deepseek.com/v1`.
 - BGE-large A/B remains paused because the CUDA Python runtime failed Windows DLL/mount loading and the CPU fallback was too slow.
 - EmbeddingGemma A/B setup and full isolated evaluation are complete but it was not promoted because the remote tunnel/prefix-proxy path still needs interactive-latency optimization and a held-out benchmark.

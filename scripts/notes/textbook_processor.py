@@ -16,9 +16,9 @@ Default model: DeepSeek V4 Pro via the DeepSeek API (text-only, no vision needed
 The processor operates on already-extracted text (pymupdf output or OCR output).
 
 Usage:
-    python scripts/textbook_processor.py process textbook.pdf --course "SYSEN 5100" --chapter 1
-    python scripts/textbook_processor.py process extracted_text.json --course "SYSEN 5100" --chapter 1 --dry-run
-    python scripts/textbook_processor.py process textbook.pdf --course "SYSEN 5100" --chapter 1 --output-dir data/textbook_extracts
+    python scripts/notes/textbook_processor.py process textbook.pdf --course "SYSEN 5100" --chapter 1
+    python scripts/notes/textbook_processor.py process extracted_text.json --course "SYSEN 5100" --chapter 1 --dry-run
+    python scripts/notes/textbook_processor.py process textbook.pdf --course "SYSEN 5100" --chapter 1 --output-dir data/textbook_extracts
 """
 
 

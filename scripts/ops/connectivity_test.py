@@ -165,7 +165,7 @@ def run_connectivity_test(
 # CLI
 # ---------------------------------------------------------------------------
 
-_LAPTOP_HOST = os.environ.get("CORNELL_KB_LAPTOP_HOST", "100.104.205.105")
+_LAPTOP_HOST = os.environ.get("CORNELL_KB_LAPTOP_HOST", "127.0.0.1")
 _EMBEDDING_URL = os.environ.get("CORNELL_KB_EMBEDDING_URL", f"http://{_LAPTOP_HOST}:8001")
 _OPENVIKING_URL = os.environ.get("CORNELL_KB_OPENVIKING_URL", "http://127.0.0.1:1934")
 _HINDSIGHT_URL = os.environ.get("CORNELL_KB_HINDSIGHT_URL", "http://127.0.0.1:8888")

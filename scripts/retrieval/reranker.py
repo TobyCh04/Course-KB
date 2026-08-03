@@ -6,12 +6,12 @@ ranking if the reranker is unavailable or times out.
 
 Usage:
     # In-process (loads model each call, ~19s overhead)
-    python scripts/reranker.py search "feedback stability" --limit 20 --rerank-top 5
-    python scripts/reranker.py ab "kanban" --limit 20  # A/B comparison
+    python scripts/retrieval/reranker.py search "feedback stability" --limit 20 --rerank-top 5
+    python scripts/retrieval/reranker.py ab "kanban" --limit 20  # A/B comparison
 
     # Server mode (model loaded once, <1s per query):
-    #   1. Start the server:  python scripts/reranker_server.py --port 1940
-    #   2. Use with --server: python scripts/reranker.py search "kanban" --server localhost:1940
+    #   1. Start the server:  python scripts/retrieval/reranker_server.py --port 1940
+    #   2. Use with --server: python scripts/retrieval/reranker.py search "kanban" --server localhost:1940
 
 Default model: BAAI/bge-reranker-base (local, ~278MB, CPU-compatible).
 """

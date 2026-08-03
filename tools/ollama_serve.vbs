@@ -1,2 +1,8 @@
+Option Explicit
+
+Dim objShell
 Set objShell = CreateObject("WScript.Shell")
-objShell.Run """C:\Users\31163\AppData\Local\Programs\Ollama\ollama.exe"" serve", 0, False
+
+' Keep Ollama discoverable through PATH instead of assuming a particular
+' Windows username or installation directory.
+objShell.Run "ollama serve", 0, False

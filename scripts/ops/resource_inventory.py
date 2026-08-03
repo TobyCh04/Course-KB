@@ -1,8 +1,8 @@
 """Resource inventory for Cornell KB — snapshot OpenViking before/after ingestion.
 
 Usage:
-    python scripts/resource_inventory.py snapshot --output inventory_before.json
-    python scripts/resource_inventory.py diff before.json after.json
+    python scripts/ops/resource_inventory.py snapshot --output inventory_before.json
+    python scripts/ops/resource_inventory.py diff before.json after.json
 
 All OpenViking interactions are injectable so tests never contact live services.
 """

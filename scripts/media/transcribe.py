@@ -10,12 +10,8 @@ import base64
 import tempfile
 import urllib.request
 
-try:
-    from scripts.core.common_client import JsonHttpClient
-    from scripts.core.model_availability import ensure_ollama_available
-except ImportError:  # pragma: no cover - direct script import
-    from scripts.core.common_client import JsonHttpClient
-    from scripts.core.model_availability import ensure_ollama_available
+from scripts.core.common_client import JsonHttpClient
+from scripts.core.model_availability import ensure_ollama_available
 
 _OLLAMA_CLIENT = JsonHttpClient(
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({})),
@@ -36,9 +32,12 @@ if os.path.exists(nvidia_base):
                 pass
     os.environ["PATH"] = ";".join(dll_paths) + ";" + os.environ.get("PATH", "")
 
-DEFAULT_OUTPUT_DIR = r"C:\Users\31163\shared\Grad\Lecture Audio"
+DEFAULT_OUTPUT_DIR = os.environ.get(
+    "CORNELL_KB_OUTPUT_DIR",
+    str(_sys_root / "data" / "artifacts" / "media"),
+)
 OLLAMA_URL = os.environ.get(
-    "CORNELL_KB_OLLAMA_URL", "http://100.104.205.105:11434/api/generate"
+    "CORNELL_KB_OLLAMA_URL", "http://127.0.0.1:11434/api/generate"
 )
 _MODEL_CACHE = {}
 

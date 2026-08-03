@@ -7,8 +7,8 @@ four required fields: source_hash, extraction_engine, timestamp, and
 downstream_resource_status.
 
 Usage:
-    python scripts/media_fixture_validation.py          # human-readable
-    python scripts/media_fixture_validation.py --json   # machine-readable
+    python scripts/media/media_fixture_validation.py          # human-readable
+    python scripts/media/media_fixture_validation.py --json   # machine-readable
 
 All processor transport/loader/model functions are injectable so tests
 never contact live services.
@@ -18,7 +18,6 @@ from __future__ import annotations
 import sys
 import argparse
 import json
-import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path

@@ -1,8 +1,8 @@
 """Reproducible pre-ingestion preflight for the Cornell KB pipeline.
 
 Usage:
-    python scripts/preflight.py [--manifest config/source_manifest.json] [--root .]
-    python scripts/preflight.py --json   # machine-readable output
+    python scripts/ingestion/preflight.py [--manifest config/source_manifest.json] [--root .]
+    python scripts/ingestion/preflight.py --json   # machine-readable output
 
 Runs every validation check that must pass before real course material is
 ingested into OpenViking. A green preflight means the pipeline is safe to
@@ -45,7 +45,7 @@ try:
         _logical_source_key,
         canonical_resource_root,
     )
-    from ..ingestion.ingestion.source_manifest import _canonical_resource_uri, _entries, load_manifest, validate_manifest
+    from .source_manifest import _canonical_resource_uri, _entries, load_manifest, validate_manifest
 except ImportError:  # pragma: no cover — direct CLI use
     from scripts.core.common_client import load_api_key
     from scripts.core.openviking_backend import (
@@ -57,7 +57,7 @@ except ImportError:  # pragma: no cover — direct CLI use
     from scripts.ingestion.source_manifest import _canonical_resource_uri, _entries, load_manifest, validate_manifest
 
 HINDSIGHT_URL = os.environ.get("CORNELL_KB_HINDSIGHT_URL", "http://localhost:8888")
-EMBEDDING_URL = os.environ.get("CORNELL_KB_EMBEDDING_URL", "http://100.104.205.105:8001")
+EMBEDDING_URL = os.environ.get("CORNELL_KB_EMBEDDING_URL", "http://127.0.0.1:8001")
 REQUIRED_MODEL = "deepseek-v4-pro"
 REQUIRED_BASE_URL = "https://api.deepseek.com/v1"
 
@@ -489,10 +489,10 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python scripts/preflight.py
-  python scripts/preflight.py --manifest config/source_manifest.json --root .
-  python scripts/preflight.py --json
-  python scripts/preflight.py --no-services --no-git
+  python scripts/ingestion/preflight.py
+  python scripts/ingestion/preflight.py --manifest config/source_manifest.json --root .
+  python scripts/ingestion/preflight.py --json
+  python scripts/ingestion/preflight.py --no-services --no-git
 """,
     )
     parser.add_argument("--manifest", default="config/source_manifest.json", help="Path to source manifest")

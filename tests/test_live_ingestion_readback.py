@@ -26,8 +26,8 @@ def test_readback_returns_none_when_only_generated_leaves_exist():
 
 
 def test_readback_accepts_json_escape_and_line_ending_normalization():
-    expected = '{\n  "source_path": "C:\\Users\\TobyC\\shared\\Test\\SE_424_HW1 Solution.pdf",\n  "pages": 7\n}'
-    actual = '{\r\n  "source_path": "C:\\\\Users\\\\TobyC\\\\shared\\\\Test\\\\SE_424_HW1 Solution.pdf",\r\n  "pages": 7\r\n}'
+    expected = '{\n  "source_path": "C:\\course_material\\SE_424_HW1_Solution.pdf",\n  "pages": 7\n}'
+    actual = '{\r\n  "source_path": "C:\\\\course_material\\\\SE_424_HW1_Solution.pdf",\r\n  "pages": 7\r\n}'
 
     assert source_readback_matches(expected, actual)
 

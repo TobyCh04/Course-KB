@@ -5,10 +5,10 @@ reranking takes <1s per query.
 
 Usage:
     # Start the server (loads model once, stays running)
-    python scripts/reranker_server.py --port 1940
+    python scripts/retrieval/reranker_server.py --port 1940
 
     # Then use reranker.py with --server flag (no model load overhead)
-    python scripts/reranker.py search "kanban" --limit 10 --rerank-top 5 --server localhost:1940
+    python scripts/retrieval/reranker.py search "kanban" --limit 10 --rerank-top 5 --server localhost:1940
 
 Health check:
     curl http://localhost:1940/health

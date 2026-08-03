@@ -22,7 +22,7 @@ Services (mini PC unless noted):
 | OpenViking | `http://127.0.0.1:1934` | `GET /health` → `healthy: true` |
 | Embedding server (BGE-small) | `http://127.0.0.1:18002` | `GET /health` → `status: ok` |
 | Hindsight | `http://127.0.0.1:8888` | `GET /v1/default/banks` → 200 |
-| Laptop embedding alt | `http://100.104.205.105:8001` | only when laptop-host pipeline is used |
+| Laptop embedding alt | `CORNELL_KB_EMBEDDING_URL` | only when a separate embedding service is used |
 
 Environment:
 - Working tree clean on `master` (or a named gate branch).

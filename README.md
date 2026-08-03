@@ -1,186 +1,329 @@
-# Cornell Knowledge Base — Project Plan
+# Cornell-KB
 
-**Status:** APPROVED
-**Created:** 2026-07-09
-**Location:** `~/hermes_related/Cornell_KB/`
+Cornell-KB is a source-grounded study pipeline for turning course material into searchable notes, retrieval artifacts, and Obsidian pages. It combines deterministic manifests and provenance checks with optional OpenViking, Hindsight, LLM, and local media-model integrations.
 
-## Current Status — 2026-07-20
+The repository is designed to be useful in two modes:
 
-- **Production OpenViking:** verified healthy on mini-PC port `1934`, using `bge-small-en-v1.5-f16` embedding index and DeepSeek V4 Flash VLM. Production config unchanged.
-- **Cornell ingestion safety:** implemented and tested. Manifest covers 32 resources: 17 reference + 15 TEST PDFs.
-- **Retrieval foundation — complete:** BM25 + dense canonical-source union with a production cap of 16 and no RRF for generation; reranker and RRF remain explicit experiments/fallbacks. The model receives L0/L1 metadata, selects candidate IDs, and reads selected L2 evidence under a 150,000-token budget.
-- **Hindsight metadata filtering — complete (`8e93df3`):** course, lecture, source type, source scope, semester, and date filters propagated through the full ingestion + recall chain. Namespaced tags generated during ingest, applied via `tags_match="all_strict"` for deterministic filtered recall. Old untagged memories remain retrievable via unfiltered recall.
-- **Planner keyword refinement — complete (`57b6fc6`):** expanded stopword set from 26 to ~70 tokens covering conversational verbs, pronouns, question words, auxiliary verbs, and filler. Queries now extract purely technical domain terms. RRF-only benchmark stable at 70% read hit@5 / 60% top-1 context hit.
-- **Textbook processor — complete (`1d20f44`, worker-default follow-up `0b095bb`):** 6-stage pipeline (overview → 3 parallel extractors → triple verification → OpenViking index prep → cross-reference → Hindsight retain). Script-specific DeepSeek V4 Pro client, bounded two-worker default, text-only over pre-extracted PDF text. Chapters 1-2 and a two-worker synthetic fixture passed dry-run verification.
-- **Live-ingestion safety gate — complete for test data:** isolated `TEST-LIVE-2W` and `TEST-FCS5` OpenViking/Hindsight tests passed write, read-back, duplicate protection, isolation, no automatic `memory_linking`, and cleanup. No actual course material has been ingested because the school term has not started.
-- **Assessment processor + model-neutral study skill — implemented:** `scripts/assessment_processor.py` normalizes homework/exam problems with `scope:assessment`; `scripts/study_commands.py` provides deterministic fixtures plus injected-LLM quiz variants; `scripts/cornell_commands.py` provides thin `/quiz`, `/review`, `/explain`, `/ingest`, and `/connect` helpers. The `cornell-kb` Hermes skill now instructs the active main model to retrieve OpenViking/Hindsight context first, then generate genuinely new quizzes/reviews with separate answer keys and provenance. HW1 TEST smoke outputs and focused tests pass. No actual course material has been ingested.
-- **Next:** keep the production corpus unchanged. The model-neutral skill workflow is ready; when actual course files become available, run the manifest gate before ingestion, then use the active Hermes model with retrieved OpenViking/Hindsight context for assessment study.
+- **Offline development:** validate manifests, run the test suite, exercise retrieval logic with fixture data, and inspect generated artifacts without any external service.
+- **Live study workflow:** process PDFs/audio/text, index approved derived artifacts, retrieve source context, and sync generated notes into an Obsidian vault.
 
-## Session Working Framework
+It is a toolkit, not a hosted application. A live deployment still needs the services described below. That distinction saves a surprising amount of confusion.
 
-All Cornell-KB implementation sessions follow [`LUNA_DS_WORKING_FRAMEWORK.md`](LUNA_DS_WORKING_FRAMEWORK.md): GPT-5.6 Luna owns architecture, planning, review, and integration; Hermes delegation, textbook processing, chunking, note generation, and runtime query actions use DeepSeek V4 Pro through the DeepSeek API. The project-root [`AGENTS.md`](AGENTS.md) makes this contract visible to Hermes/Coding Agent sessions. Runtime query planning remains in the active Hermes turn and must not create a second model connection.
+## What is included
 
-## Overview
+- Source manifests with SHA-256 validation and deterministic resource identities.
+- PDF/text/media artifact handling with provenance metadata.
+- Hybrid retrieval utilities: dense OpenViking search plus a local BM25 index, with optional reranking.
+- Hindsight-backed study-memory ingestion with production-bank safeguards.
+- Obsidian synchronization with course namespace routing and managed-file boundaries.
+- Offline tests and a synthetic fixture manifest that works immediately after checkout.
 
-An AI-powered personal knowledge base for Cornell MEng coursework. Ingests lecture slides, audio transcripts, textbooks, homework, and exams through the laptop's OCR/Whisper pipeline. Uses OpenViking as the source-grounded document retrieval backend and Hindsight as the complementary personal, temporal, and graph-memory layer. Generates structured notes, enables natural language search across all material, and supports active recall through quizzing. Integrates with Obsidian for browsable notes and Hermes for conversational access.
+The public repository does **not** include private course folders, raw lecture audio, generated indexes, API credentials, or the separate Lean reference project. Real course manifests and source files should remain local.
 
-## Media Pipeline Commands and Performance Options
+## Quick start
 
-Run commands from the project root. The original command forms remain valid:
+### Requirements
 
-```powershell
-python transcribe.py transcribe lecture.mp3
-python transcribe.py transcribe study_group.mp3 --engine moss
-python transcribe.py ocr lecture_notes.pdf
-python transcribe.py vision diagram.png --prompt "explain this"
-python scripts/diagrams.py slides.pdf --course "SYSEN 5100" --lecture 1
+- Python 3.11 or newer
+- Git
+- Optional: an OpenViking server, Hindsight server, Ollama, or an LLM provider for live features
+
+Create an environment and install the dependencies used by the offline suite:
+
+```bash
+python -m venv .venv
 ```
 
-### Transcription and OCR configuration
+Windows:
 
-- **Whisper:** use `--device` and `--compute-type` to override CUDA defaults, e.g.
-  `python transcribe.py transcribe lecture.mp3 --device cpu --compute-type int8`.
-  Within a long-lived Python process, identical Whisper model/device/compute settings
-  reuse the loaded model; pass `--no-model-cache` to force a fresh load.
-  Environment equivalents are `CORNELL_KB_WHISPER_DEVICE` and
-  `CORNELL_KB_WHISPER_COMPUTE_TYPE`.
-- **MOSS:** `--engine moss --moss-model <id> --moss-device <preference>` selects a
-  diarization runtime; defaults remain `OpenMOSS-Team/MOSS-Transcribe-Diarize` and
-  `auto`. `CORNELL_KB_MOSS_MODEL` and `CORNELL_KB_MOSS_DEVICE` provide the same
-  configuration, and cached runtimes are reused in-process unless disabled.
-- **Scanned PDFs:** scanned pages render at **150 DPI** by default. Override only
-  when required with `--dpi <value>`. GLM-OCR remains primary and Qwen3-VL remains
-  the fallback: `--engine glm-ocr --fallback-engine qwen3-vl:8b`.
-- **Ollama endpoint:** OCR and `vision` accept `--ollama-url URL`; set
-  `CORNELL_KB_OLLAMA_URL` for a default endpoint. This makes local and remote
-  deployments explicit without changing scripts.
+```powershell
+.venv\Scripts\activate
+python -m pip install -r requirements-dev.txt
+```
 
-Diagram extraction now asks the vision model for both the category and detailed
-structured description in one request. It represents scanned pages by one full-page
-render, removes duplicate extracted image bytes, and uses a unique temporary directory
-per run that is removed even if processing fails. OCR rendering has the same unique,
-cleaned-up temporary-directory behavior, so concurrent/repeated runs do not share
-`page_N.png` filenames.
+macOS/Linux:
 
-## Laptop media pipeline and batch ingestion
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+```
 
-The repeatable laptop path is now split into a safe local phase and an explicit indexing phase:
+Run the checks:
+
+```bash
+python -m pytest -q
+python -m compileall -q scripts tests test_runs
+```
+
+The repository's offline gate is also available directly:
+
+```bash
+python test_runs/e2e_gate.py
+```
+
+### Validate the checked-in fixture manifest
+
+The checked-in `config/source_manifest.json` contains only repository-local fixture files. It is a safe example, not a place to add personal course paths.
+
+```bash
+python scripts/ingestion/source_manifest.py validate \
+  --manifest config/source_manifest.json \
+  --root .
+
+python scripts/ingestion/preflight.py \
+  --manifest config/source_manifest.json \
+  --root . \
+  --no-services \
+  --no-git
+```
+
+The second command is a diagnostic preflight. It will report any live-provider configuration that is unavailable; use the first command and the offline gate when you only want a no-network check.
+
+## Repository map
 
 ```text
+config/
+  course_manifest_template.json   Template for a local course manifest
+  course_namespaces.yaml          Course-to-Obsidian routing rules
+  pipeline_laptop.yaml            Media pipeline defaults
+  source_manifest.json            Safe, repository-local fixture manifest
+
+data/test_sources/                Small fixture corpus for offline tests
+scripts/core/                     HTTP, provenance, model, and OpenViking adapters
+scripts/ingestion/                Manifest validation and ingestion helpers
+scripts/media/                    Transcription, OCR, and diagram tooling
+scripts/notes/                    Chunking and note generation
+scripts/ops/                      Pipelines, connectivity, cleanup, and Obsidian sync
+scripts/retrieval/                Search, BM25, hybrid fusion, and reranking
+tests/                             Offline regression tests
+docs/                              Onboarding and production runbooks
+tools/                             Optional Windows/Linux model helpers
+```
+
+## Typical workflows
+
+### 1. Add local course material
+
+Keep source files under an ignored local directory such as `courses/<course-slug>/`. Start from the template rather than editing the public fixture manifest:
+
+```bash
+mkdir -p config/manifests courses/my-course
+cp config/course_manifest_template.json config/manifests/my-course.json
+```
+
+Fill in relative source paths and SHA-256 hashes, then validate before indexing:
+
+```bash
+python scripts/ingestion/source_manifest.py validate \
+  --manifest config/manifests/my-course.json \
+  --root .
+```
+
+Use `--no-services --no-git` on preflight when you are checking local structure only. Do not use `--index` or live ingestion until the manifest and provenance checks are green.
+
+### 2. Process media
+
+The media pipeline accepts a directory of PDFs, audio, images, or text and writes derived artifacts plus a manifest. It does not index anything unless `--index` is explicitly supplied.
+
+```bash
 python scripts/ops/laptop_pipeline.py \
-  --input-dir C:/path/to/course-material \
-  --output-dir data/artifacts/course-01 \
-  --course SYSEN-424 \
+  --input-dir courses/my-course/incoming \
+  --output-dir data/artifacts/my-course \
+  --course MY-COURSE \
   --lecture 1
 ```
 
-The command discovers audio, PDF, image, and text inputs; runs Whisper, pymupdf/GLM-OCR, or Qwen3-VL as appropriate; writes deterministic SHA-256-named artifacts; and emits `pipeline_manifest.json`. It does not contact OpenViking or Hindsight unless `--index` is explicitly supplied:
+The GPU/media dependencies are intentionally separate:
 
-```text
-python scripts/ops/laptop_pipeline.py \
-  --input-dir C:/path/to/course-material \
-  --output-dir data/artifacts/course-01 \
-  --course SYSEN-424 \
+```bash
+python -m pip install -r requirements-media.txt
+```
+
+MOSS transcription has its own upstream install step and is optional. The default Whisper/Ollama endpoints are local and can be overridden with environment variables; no private machine address is embedded in the repository.
+
+## Switching models and providers
+
+There is no single global model switch. Cornell-KB has separate model roles, and
+the supported switch depends on which stage you are running:
+
+| Stage | Current route | How to switch |
+|---|---|---|
+| Note synthesis, fact checking, and corrections | DeepSeek V4 Pro API | Set `DEEPSEEK_API_KEY`; override the compatible endpoint with `--api-url` if needed |
+| Diagram descriptions | Ollama, default `qwen3-vl:8b` | Pass `--model` and optionally `--ollama-url` to `scripts/media/diagrams.py` |
+| OCR | Ollama, default `glm-ocr` with `qwen3-vl:8b` fallback | Pass `--engine`, `--fallback-engine`, and `--ollama-url` to `scripts/media/transcribe.py ocr` |
+| Single-speaker transcription | Local faster-whisper, default `large-v3-turbo` | Pass `--model`, `--device`, and `--compute-type` to `scripts/media/transcribe.py transcribe` |
+| Multi-speaker transcription | Local MOSS runtime | Pass `--engine moss` and `--moss-model` to `scripts/media/transcribe.py transcribe` |
+
+### Use the API model for note generation
+
+The note-generation path is already API-backed. It deliberately no longer uses
+Ollama for text synthesis, so do **not** point `--ollama-url` at a cloud API;
+that option is retained only as a deprecated no-op for old scripts.
+
+Set the key in the environment. Bash/macOS/Linux:
+
+```bash
+export DEEPSEEK_API_KEY="<your-deepseek-key>"
+python scripts/notes/note_generator.py \
+  --transcript courses/my-course/incoming/lecture.txt \
+  --course MY-COURSE \
   --lecture 1 \
-  --index
+  --topic "Lecture topic" \
+  --backend deepseek \
+  --model deepseek-v4-pro
 ```
 
-`--index` uses `scripts/ops/batch_ingest.py`. Each item carries the original source path and hash even when the indexed file is a derived transcript/OCR/diagram artifact. The JSONL log records indexed, idempotent-skipped, and failed items. A rerun skips only items previously recorded as successful for the same source path and hash; failures remain visible and later items continue. This makes interrupted multi-lecture runs resumable without silently treating changed source content as the old version. Hindsight fact retention remains a separate, explicit step through `scripts/ingestion/ingest.py`; production bank writes still require explicit authorization.
-
-Run the no-proxy repeated service check before an indexed run:
-
-```text
-python scripts/ops/connectivity_test.py --rounds 3 --timeout 5
-```
-
-It prints machine-readable JSON with per-round status and latency statistics and exits non-zero unless every configured endpoint succeeds in every round. Endpoints are controlled by `CORNELL_KB_LAPTOP_HOST`, `CORNELL_KB_EMBEDDING_URL`, `CORNELL_KB_OPENVIKING_URL`, and `CORNELL_KB_HINDSIGHT_URL`. The current laptop embedding default is `http://100.104.205.105:8001/health`. The complete non-secret defaults are in `config/pipeline_laptop.yaml`.
-
-For isolated live operator replays, use the durable scripts under `scripts/ops/`:
-
-```text
-python scripts/ops/live_control_systems_ingestion.py
-python scripts/ops/live_pdf_ingestion.py
-```
-
-These scripts require the local TEST corpus/artifacts, use only `TEST-*` OpenViking courses and Hindsight banks, verify source-content readback, and clean their exact TEST resources. They must never be pointed at production course files without the manifest/preflight gates and explicit approval.
-
-## Obsidian auto-sync
-
-Generated Markdown notes can be staged under `courses/<course_slug>/derived/notes/` and synchronized into the registered vault layout without contacting OpenViking, Hindsight, or an LLM:
-
-```text
-python scripts/ops/obsidian_sync.py --once
-python scripts/ops/obsidian_sync.py --watch --interval 3
-```
-
-The sync reads `config/course_namespaces.yaml`, routes notes to `Lectures/`, `Notes/`, `Homework/`, `Exams/`, or `Diagrams/`, preserves user-authored vault content, adds a managed generated-notes section to each course index, and adds managed related-note wikilinks. It is idempotent. Use `--dry-run` to inspect candidates and `--prune` only when managed notes whose source disappeared should be removed. The Windows task `Cornell KB Obsidian Sync` runs the watcher at user logon after installation.
-
-## Deterministic lexical-index rebuild
-
-`data/lexical_index.json` is generated and ignored by Git. Rebuild it from the authoritative manifest with:
+PowerShell:
 
 ```powershell
-python scripts/source_manifest.py rebuild-index --manifest config/source_manifest.json --root . --index-path data/lexical_index.json
+$env:DEEPSEEK_API_KEY = "<your-deepseek-key>"
+python scripts/notes/note_generator.py --transcript courses/my-course/incoming/lecture.txt --course MY-COURSE --lecture 1 --backend deepseek --model deepseek-v4-pro
 ```
 
-The command validates all source hashes and metadata first, then rebuilds the index from the curated text resources and manifest-linked extracted PDF text. The PDF files remain the OpenViking source artifacts; their extracted JSON is used only for BM25 indexing.
+The loader checks the environment first, then a `KEY=value` file. Set
+`CORNELL_KB_ENV_FILE` to choose the file explicitly; when running through
+Hermes, `HERMES_HOME/.env` is discovered automatically, and standalone use
+falls back to `~/.config/cornell-kb/.env`. To route the DeepSeek-compatible
+client through a gateway, pass its chat-completions endpoint:
 
-## Phases
-
-### Phase 1: Core Infrastructure
-1. **Whisper Transcription Pipeline** — Install Whisper on RTX 4080 laptop, test with sample lecture audio, create a script that takes audio file → outputs clean transcript with timestamps
-2. **Document Extraction Pipeline** — PDF text extraction (slides, textbooks, homework) using pymupdf, handle formulas/diagrams, output structured markdown
-3. **Hindsight Integration** — Set up retain/recall/reflect with course metadata schema (course, lecture#, source_type, topic, date), test ingestion and retrieval for personal/temporal/graph memory
-
-### Phase 2: Knowledge Processing and Retrieval Backend
-4. **Lecture Note Generator** — Takes transcript + slide PDF → generates structured lecture notes (key concepts, formulas, examples, action items)
-5. **OpenViking Cornell Backend** — Safe curated adapter, source search/read/trace CLI, and ingestion safety complete; laptop orchestration remains separately deferred.
-6. **Primary English Embedding Upgrade** — EmbeddingGemma A/B experiment complete but not promoted; BGE-small remains the production baseline while remote latency and held-out evaluation remain open.
-7. **Reranking Layer** — ✅ Complete: cross-encoder reranking with persistent `bge-reranker-base` server and dense fallback.
-8. **Lexical/Hybrid Retrieval** — ✅ Complete: BM25 lexical retrieval plus dense RRF fusion, canonical URI deduplication, and rebuilt metadata-aware lexical index.
-9. **LLM Query Layer** — ✅ Complete: validated planner contracts, deterministic fallback, lexical/semantic role routing, one shared hybrid execution, provenance, readable-source filtering, query-focused reranker context, and source-read verification.
-10. **Textbook Processor** — ✅ Complete (`1d20f44`, `0b095bb`): 6-stage pipeline extracts concepts, formulas, examples from textbooks → prepares OpenViking resources with structured metadata tags → retains learning memories in Hindsight. Script-specific DeepSeek V4 Pro client, bounded two-worker default, triple verification, and LaTeX-aware JSON parser. Chapters 1-2 and the two-worker synthetic fixture passed dry-run verification. The isolated live fake-namespace gate passed, but OpenViking memory linking consumed 975,780 internal LLM tokens; real-course ingestion remains blocked until that behavior is bounded or disabled.
-11. **Homework/Exam Processor** — Extracts problem statements, solution patterns, common mistakes → indexes source content in OpenViking and retains review memories in Hindsight
-
-### Phase 3: Hermes Skill
-12. **`cornell-kb` Skill** — Commands: `/ingest`, `/review`, `/quiz`, `/search`, `/connect`
-13. **Teach Skill Integration** — Pull from OpenViking and Hindsight for context-aware quizzing, track weak areas
-
-### Phase 4: Obsidian Layer
-14. **Vault Structure** — `Cornell/` folder with per-course subfolders, lecture note templates, cross-reference wikilinks
-15. **Auto-Sync** — OpenViking source references and Hindsight recall results export as Obsidian notes, backlinks auto-generated
-
-### Phase 5: Exam and Review
-16. **Comprehensive Review Generator** — Per-course review from all stored material
-17. **Spaced Repetition System** — Track reviewed topics, surface weak areas before exams
-
-### Phase 6: Pipeline Operations and Evaluation
-18. **Laptop Pipeline Orchestration** — Route OCR, Whisper, semantic extraction, embedding, and indexing through the laptop because the media models already run there
-19. **Retrieval Evaluation and Promotion** — Expand the grounded benchmark with ambiguous, formula-heavy, multi-source, temporal, and multi-hop questions; compare Recall@1/5, MRR, source traceability, context quality, latency, and resource use before promoting a production configuration
-
-## Pipeline Flow
-
-```
-Lecture slides (PDF) ──┐
-Lecture audio ─────────┤
-Textbook chapters ─────┼──→ Laptop Extract/OCR/Whisper ──→ OpenViking Resources
-Homework/exams ────────┘                    │                     ↓
-                                           │              Source-grounded read/search
-                                           ▼                     │
-                                    Hindsight Retain ───────┐    │
-                              (personal/temporal/graph)    │    │
-                                                            ▼    ▼
-                                             Hermes `cornell-kb` Backend
-                                                            ↓
-                                           Obsidian Notes / Teach / Quiz
+```bash
+python scripts/notes/note_generator.py ... \
+  --api-url "https://api.example.com/v1/chat/completions"
 ```
 
-## Next Steps
+The current implementation intentionally accepts only the `deepseek` backend
+and `deepseek-v4-pro` model. Switching to an unrelated API provider or model is
+not an environment-only change: update the provider/client validation in
+`scripts/notes/note_generator.py` and `scripts/core/common_client.py`, update
+the generated-note metadata, and add tests before using it. This prevents a
+provider-specific request format from being sent to the wrong endpoint.
 
-- [ ] Detailed plan for Phase 1
-- [x] Detailed plan for Phase 2 (steps 6-9: OpenViking retrieval) — [step6_openviking_plan.md](step6_openviking_plan.md)
-- [ ] Detailed plan for Phase 3
-- [ ] Detailed plan for Phase 4
-- [ ] Detailed plan for Phase 5
-- [x] Detailed OpenViking retrieval plan: [backend, embedding upgrade, reranking, hybrid retrieval, and LLM query layer](step6_openviking_plan.md)
-- [ ] Detailed plan for Phase 6 pipeline operations and retrieval evaluation
+### Switch local Ollama models
+
+For diagrams, the model is a command-line option:
+
+```bash
+ollama pull qwen3-vl:8b
+python scripts/media/diagrams.py slides.pdf \
+  --course MY-COURSE \
+  --lecture 1 \
+  --model qwen3-vl:8b
+```
+
+For OCR, choose the primary and fallback engines:
+
+```bash
+python scripts/media/transcribe.py ocr slides.pdf \
+  --engine glm-ocr \
+  --fallback-engine qwen3-vl:8b
+```
+
+For audio, choose Whisper or MOSS and their model settings:
+
+```bash
+python scripts/media/transcribe.py transcribe lecture.wav \
+  --engine whisper \
+  --model large-v3-turbo
+
+python scripts/media/transcribe.py transcribe discussion.wav \
+  --engine moss \
+  --moss-model OpenMOSS-Team/MOSS-Transcribe-Diarize
+```
+
+To use an Ollama server on another machine, change the Ollama endpoint rather
+than changing the model code:
+
+```bash
+export CORNELL_KB_OLLAMA_URL="http://your-ollama-host:11434/api/generate"
+```
+
+The OCR, diagram, and local transcription entrypoints do not currently expose
+cloud OCR/vision/audio providers. Moving those stages from local models to a
+cloud API requires a separate adapter; setting `CORNELL_KB_OLLAMA_URL` to a
+non-Ollama API is not sufficient because the request and response schemas
+differ.
+
+### 3. Use live retrieval
+
+Install the live SDK only when you have an OpenViking service:
+
+```bash
+python -m pip install -r requirements-live.txt
+```
+
+Build the ignored local lexical index from your approved manifest, then use the retrieval CLI with the service URL configured for your environment. The live commands require a running OpenViking server and are deliberately not part of the offline test path.
+
+```bash
+python scripts/ingestion/source_manifest.py rebuild-index \
+  --manifest config/manifests/my-course.json \
+  --root . \
+  --index-path data/lexical_index.json
+
+python scripts/retrieval/search.py health
+python scripts/retrieval/search.py hybrid "closed loop stability" \
+  --index-path data/lexical_index.json
+```
+
+### 4. Sync notes to Obsidian
+
+Preview a sync without writing to the vault:
+
+```bash
+python scripts/ops/obsidian_sync.py \
+  --source-root courses \
+  --vault-root ~/obsidian-vault \
+  --once \
+  --dry-run
+```
+
+For a Windows launcher, `scripts/ops/start_obsidian_sync.vbs` resolves the repository from its own location. Set `CORNELL_KB_PYTHON` if `python` on `PATH` is not the interpreter you want.
+
+## Configuration
+
+The project uses local defaults and environment overrides. Set only the values needed for the feature you are using:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `CORNELL_KB_OPENVIKING_URL` | OpenViking HTTP endpoint | `http://127.0.0.1:1934` |
+| `CORNELL_KB_HINDSIGHT_URL` | Hindsight HTTP endpoint | `http://127.0.0.1:8888` |
+| `CORNELL_KB_EMBEDDING_URL` | Embedding service health endpoint | `http://127.0.0.1:8001` |
+| `CORNELL_KB_OLLAMA_URL` | Ollama generation endpoint | `http://127.0.0.1:11434/api/generate` |
+| `CORNELL_KB_OUTPUT_DIR` | Default media artifact directory | `data/artifacts/media` |
+| `CORNELL_KB_WHISPER_DEVICE` | Whisper device selection | `cuda` |
+| `CORNELL_KB_WHISPER_COMPUTE_TYPE` | Whisper compute type | `float16` |
+| `CORNELL_KB_OLLAMA_SSH_TARGET` | Optional `user@host` for remote Ollama startup | unset; launch locally |
+| `CORNELL_KB_OLLAMA_REMOTE_EXE` | Remote/local Ollama executable | `ollama` |
+| `CORNELL_KB_ENV_FILE` | Optional local `KEY=value` file for provider credentials | `~/.config/cornell-kb/.env` |
+| `DEEPSEEK_API_KEY` | Optional LLM access for generation/planning | unset |
+
+If you run the project through Hermes, its configured environment-file mechanism may also provide credentials. Environment variables are preferred for standalone use. Never commit `.env`, keys, authorization headers, or generated traces containing secrets.
+
+## Architecture and safety boundaries
+
+1. **Manifest layer** — validates paths, hashes, metadata, duplicate sources, and namespace-safe identities.
+2. **Artifact layer** — converts media into text/structured artifacts while recording the source hash and extraction engine.
+3. **Index layer** — sends only approved document/text artifacts to OpenViking; audio remains local and is never uploaded as audio.
+4. **Retrieval layer** — combines dense and lexical candidates while preserving source URIs and read-back provenance.
+5. **Memory/notes layer** — writes explicitly scoped Hindsight facts and managed Obsidian notes.
+
+The LLM can improve planning or generation, but validation and source selection remain deterministic code paths. Live writes should be treated as an explicit operator action, not an accidental side effect of running a test.
+
+## Development checks
+
+Before opening a pull request or sharing a change:
+
+```bash
+python -m pytest -q
+python -m compileall -q scripts tests test_runs
+git diff --check
+```
+
+The same test and compile steps run in GitHub Actions. Keep generated artifacts, local manifests, course content, model caches, and credentials out of commits. See `docs/course-onboarding.md` for the full course setup flow and `docs/production-readiness-runbook.md` for live-service gates.
+
+## Current status
+
+The offline retrieval and ingestion contracts are implemented and tested. The live-service path is intentionally configurable rather than bundled: friends can run the tests immediately, then add only the services and model dependencies they actually need.
+
+## License
+
+No license has been selected yet. Until one is added, the repository is viewable on GitHub but should not be treated as licensed for redistribution or commercial use.

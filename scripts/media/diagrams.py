@@ -39,7 +39,7 @@ _OLLAMA_CLIENT = JsonHttpClient(
 )
 
 OLLAMA_URL = os.environ.get(
-    "CORNELL_KB_OLLAMA_URL", "http://100.104.205.105:11434/api/generate"
+    "CORNELL_KB_OLLAMA_URL", "http://127.0.0.1:11434/api/generate"
 )
 VISION_MODEL = "qwen3-vl:8b"
 

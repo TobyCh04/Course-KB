@@ -15,7 +15,20 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-DEFAULT_ENV_PATH = Path.home() / "AppData" / "Local" / "hermes" / ".env"
+def _default_env_path() -> Path:
+    """Resolve credentials without embedding a machine-specific filesystem path."""
+    explicit_path = os.environ.get("CORNELL_KB_ENV_FILE")
+    if explicit_path:
+        return Path(explicit_path)
+
+    hermes_home = os.environ.get("HERMES_HOME")
+    if hermes_home:
+        return Path(hermes_home) / ".env"
+
+    return Path.home() / ".config" / "cornell-kb" / ".env"
+
+
+DEFAULT_ENV_PATH = _default_env_path()
 
 
 class HttpClientError(RuntimeError):
@@ -168,7 +181,7 @@ class DeepSeekClient:
     def complete(self, prompt: str, *, model: str, max_tokens: int = 8192, temperature: float = 0.1) -> str:
         if not self.api_key:
             raise HttpClientError(
-                "DEEPSEEK_API_KEY is not set. Set it in the environment or ~/AppData/Local/hermes/.env."
+                "DEEPSEEK_API_KEY is not set. Set it in the environment or the configured Cornell-KB env file."
             )
         response = self.http_client.post_json(
             self.api_url,

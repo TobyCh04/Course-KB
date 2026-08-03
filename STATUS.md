@@ -19,14 +19,14 @@
 - `SourceHashMismatch` exception raised when same logical source is re-ingested with a different content hash.
 - Idempotent skip when same logical source + same hash is re-ingested (no redundant `add_resource` call).
 - `_logical_source_key()` and `_logical_source_stem()` helpers extract course/source-type/stem identity from URIs, stripping the 12-char hash-derived digest.
-- Stem derivation in `resource_uri()` now includes parent-directory prefix for files in subdirectories, eliminating false collisions for same-named files (e.g. `books/lean-implementation/*/SKILL.md`).
+- Stem derivation in `resource_uri()` now includes parent-directory prefixes for files in subdirectories, eliminating false collisions for same-named files.
 - Check enforced in `index_file()` (per-resource gate) and propagates naturally through `ingest_manifest()`.
 
-**Files:** `scripts/openviking_backend.py`, `scripts/source_manifest.py`, `tests/test_openviking_backend.py` (+6 tests)
+**Files:** `scripts/core/openviking_backend.py`, `scripts/ingestion/source_manifest.py`, `tests/test_openviking_backend.py` (+6 tests)
 
 ### Priority 2: Reproducible preflight command ✅
 
-- New `scripts/preflight.py` — single command, six checks:
+- New `scripts/ingestion/preflight.py` — single command, six checks:
   1. Manifest validation (paths, hashes, duplicates)
   2. Service health (OpenViking, embedding, Hindsight) — injectable for tests
   3. LLM routing (model must be `deepseek-v4-pro`, URL must be `api.deepseek.com/v1`, Flash rejected)
@@ -37,21 +37,21 @@
 - Output: human-readable text or machine-readable JSON.
 - `--no-services` and `--no-git` flags for offline mode.
 
-**Files:** `scripts/preflight.py` (new), `tests/test_preflight.py` (new, 20 tests)
+**Files:** `scripts/ingestion/preflight.py` (new), `tests/test_preflight.py` (new, 20 tests)
 
-### Manifest cleanup: lean-implementation removed
+### Manifest cleanup: unrelated reference material removed from public distribution
 
-- 14 lean-implementation entries removed from `config/source_manifest.json` (files preserved on disk as separate project).
-- `RAW_BOOK_FILENAMES`, `CURATED_DERIVED_ROOT`, `CURATED_DERIVED_EXCLUDED_PARTS`, `CURATED_DERIVED_EXTENSIONS` removed from `openviking_backend.py`.
-- `is_approved_cornell_path()` now only accepts `CURATED_SOURCE_PATHS` entries.
-- `lexical_index.py` no longer scans `books/lean-implementation/` for indexing.
-- Manifest: 32 → 18 entries (3 reference + 15 TEST PDFs).
+- Unrelated reference material was removed from the public Git index and remains ignored locally.
+- `RAW_BOOK_FILENAMES`, `CURATED_DERIVED_ROOT`, `CURATED_DERIVED_EXCLUDED_PARTS`, `CURATED_DERIVED_EXTENSIONS` removed from `scripts/core/openviking_backend.py`.
+- `is_approved_cornell_path()` in `scripts/core/openviking_backend.py` now only accepts `CURATED_SOURCE_PATHS` entries.
+- `scripts/retrieval/lexical_index.py` no longer scans unrelated reference trees for indexing.
+- Public fixture manifest: 19 repository-local test sources; private course manifests stay local.
 
-**Files:** `config/source_manifest.json`, `scripts/openviking_backend.py`, `scripts/source_manifest.py`, `scripts/lexical_index.py`, `tests/test_openviking_backend.py`
+**Files:** `config/source_manifest.json`, `scripts/core/openviking_backend.py`, `scripts/ingestion/source_manifest.py`, `scripts/retrieval/lexical_index.py`, `tests/test_openviking_backend.py`
 
 ## Verification
 
-- **318 tests passed in the final verification run**
+- **334 tests passed in the current local verification run**
 - Python compilation clean
 - `git diff --check` clean
 - Preflight: 4/4 PASS (offline), SKILL.md conflict resolved
@@ -60,13 +60,13 @@
 - Recovery tooling: 22/22 PASS — structured JSONL logging, checkpoint/resume, resource inventory snapshot/diff, test cleanup (OpenViking + Hindsight), course manifest template
 - Laptop pipeline smoke: text discovery/processing/manifest emission PASS; targeted pipeline contract suite 6/6 PASS
 - Expanded benchmark: synthetic 18/18 full lexical + BGE-small + hybrid PASS; adversarial control-material 22 sources/14 queries full lexical + BGE-small + hybrid PASS; `production_services_accessed: false`
-- Connectivity run: Ollama 3/3, embedding 3/3 at `100.104.205.105:8001/health`, OpenViking 3/3, Hindsight health 3/3
+- Connectivity run: Ollama 3/3, embedding 3/3, OpenViking 3/3, Hindsight health 3/3. Service addresses are configured through environment variables and local config.
 - Live readback smoke: one real HW1-derived artifact indexed, read back from the source-content leaf with JSON normalization, and cleaned successfully; `memory_linking_present: false`
 - Control corpus live replay: 22/22 real OpenViking writes, 22/22 source readbacks, 22 Hindsight facts in `[5,5,5,5,2]`, non-empty recall, OpenViking remaining 0, Hindsight TEST bank removed
 - Original PDF branch: 15/15 original PDFs processed locally through the PDF/OCR path, 15/15 live OpenViking writes/readbacks, 15 Hindsight facts in `[5,5,5]`, cleanup verified zero resources
 - Manifest/hash acceptance: 37/37 source hashes and non-empty derived artifacts verified; final TEST namespace inventory 0 resources
 - Obsidian vault: registered-course scaffold, four Cornell templates, course index notes, and Templates plugin default folder configured
-- Obsidian auto-sync: `scripts/ops/obsidian_sync.py` routes staged generated notes through the course registry, updates managed course-index sections and related-note wikilinks, supports idempotent one-shot/watch/dry-run/prune modes, and is running via the user Startup shortcut `Cornell KB Obsidian Sync`
+- Obsidian auto-sync: `scripts/ops/obsidian_sync.py` routes staged generated notes through the course registry, updates managed course-index sections and related-note wikilinks, and supports idempotent one-shot/watch/dry-run/prune modes. `scripts/ops/start_obsidian_sync.vbs` is an optional portable Windows launcher.
 
 ## Remaining pre-semester work
 
@@ -83,8 +83,8 @@ Check in a repeatable gate covering: first write, duplicate idempotency, provena
 
 Run isolated fixtures for Whisper/MOSS, pymupdf, GLM-OCR, Qwen3-VL/diagram extraction, and DeepSeek V4 Pro synthesis. Every artifact must carry source hash, extraction engine, timestamp, and downstream resource status.
 
-- `scripts/media_artifact.py` — `ArtifactRecord` dataclass with the four required fields + `make_artifact()` factory + `validate_artifact()` checker
-- `scripts/media_fixture_validation.py` — 6-fixture validation: whisper, moss, pymupdf, glm-ocr, qwen3-vl, deepseek-synthesis; all injectable
+- `scripts/ingestion/media_artifact.py` — `ArtifactRecord` dataclass with the four required fields + `make_artifact()` factory + `validate_artifact()` checker
+- `scripts/media/media_fixture_validation.py` — 6-fixture validation: whisper, moss, pymupdf, glm-ocr, qwen3-vl, deepseek-synthesis; all injectable
 - `tests/test_media_fixture_validation.py` — 24 offline tests, all pass
 - Every artifact carries: `source_hash`, `extraction_engine`, `ingestion_timestamp`, `downstream_resource_status`
 - Valid engines: whisper-large-v3-turbo, moss-0.9b, pymupdf, glm-ocr, qwen3-vl:8b, deepseek-v4-pro
@@ -94,9 +94,9 @@ Run isolated fixtures for Whisper/MOSS, pymupdf, GLM-OCR, Qwen3-VL/diagram extra
 
 Structured ingestion logs, retry/resume checkpoints, queue/error reporting, resource inventories, test cleanup, course manifest templates.
 
-- `scripts/ingestion_logger.py` — JSONL ingestion log (append-only) with `IngestionLogger` class; `read_logged_uris()` + `build_resume_manifest()` for checkpoint/resume
-- `scripts/resource_inventory.py` — `snapshot()` pre/post ingestion, `diff()` before/after comparison, save/load as JSON
-- `scripts/test_cleanup.py` — `run_cleanup()` removes test resources by URI, pattern, or manifest entry; dry-run mode; Hindsight bank cleanup
+- `scripts/ingestion/ingestion_logger.py` — JSONL ingestion log (append-only) with `IngestionLogger` class; `read_logged_uris()` + `build_resume_manifest()` for checkpoint/resume
+- `scripts/ops/resource_inventory.py` — `snapshot()` pre/post ingestion, `diff()` before/after comparison, save/load as JSON
+- `scripts/ops/test_cleanup.py` — `run_cleanup()` removes test resources by URI, pattern, or manifest entry; dry-run mode; Hindsight bank cleanup
 - `config/course_manifest_template.json` — starter template with 6 source types (textbook, transcript, homework, exam, slides, derived OCR)
 - `tests/test_recovery_tooling.py` — 22 offline tests covering logger, checkpoint/resume, inventory snapshot/diff, cleanup, template validation
 
@@ -138,7 +138,7 @@ and `step3_hindsight_plan.md` that require zero real course files:
 | D1 | ✅ **Laptop pipeline script** | 6.2 | `scripts/ops/laptop_pipeline.py` discovers audio/PDF/image/text inputs, creates deterministic hash-bound artifacts and a JSON manifest, and indexes only with explicit `--index`. Configuration: `config/pipeline_laptop.yaml`. |
 | D2 | ✅ **Expanded retrieval benchmark** | 6.3/6.8 | Synthetic regression set: 18 sources/18 hardened queries; lexical, BGE-small, and hybrid RRF all achieved 100% Recall@1/5 and MRR 1.0. Adversarial real-material set: 22 sources/14 queries; lexical Recall@1 0.857/MRR 0.929, semantic 0.357/0.613, hybrid RRF 0.571/0.750, with expected-source/evidence coverage@5 at 1.0. Neither set alone promotes a larger embedding model. |
 | D3 | ✅ **Batch ingestion** | 3.6.9 | `scripts/ops/batch_ingest.py` processes multiple derived artifacts with per-item JSONL logging, continuation after failures, idempotent-skip preservation, and hash/path-based resume. |
-|| D4 | ✅ **Laptop connectivity test** | 6.2 | `scripts/ops/connectivity_test.py` runs repeated no-proxy HTTP probes with latency statistics and JSON output. Ollama, embedding `100.104.205.105:8001/health`, OpenViking, and Hindsight all passed 3/3 rounds. |
+|| D4 | ✅ **Service connectivity test** | 6.2 | `scripts/ops/connectivity_test.py` runs repeated no-proxy HTTP probes with latency statistics and JSON output. Ollama, embedding, OpenViking, and Hindsight all passed 3/3 rounds in the recorded environment. |
 || D5 | **Embedding A/B smoke test** | 6.3 | Test bge-base-en-v1.5 against bge-small on expanded benchmark. Separate workspace, no production risk. Would tell us if upgrading is worth it before courses start. |
 || D6 | ✅ **Obsidian auto-sync** | 4.2/4.3 | `scripts/ops/obsidian_sync.py` watches staged generated Markdown, routes it through `course_namespaces.yaml`, updates course indexes and related-note wikilinks, and preserves user-authored content. |
 

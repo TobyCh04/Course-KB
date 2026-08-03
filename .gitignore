@@ -1,7 +1,12 @@
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
+.coverage
+htmlcov/
 .env
+.env.*
+!.env.example
 *.egg-info/
 dist/
 build/
@@ -14,15 +19,47 @@ venv/
 *.png
 *.jpg
 *.jpeg
+*.log
+*.jsonl
+*.sqlite3
+.DS_Store
+Thumbs.db
 data/*.json
 # Generated BM25 index; rebuild from config/source_manifest.json.
 data/lexical_index.json
+data/artifacts/
+logs/
+
+# Local course material and per-user manifests. The checked-in manifest is a
+# synthetic fixture only; real source paths and hashes stay outside Git.
+courses/
+config/manifests/
+
+# Local model/compiler caches.
+.torch-cache/
+
+# Internal Hermes session notes and the separate Lean reference project are not
+# part of the public Cornell-KB distribution.
+.hermes/
+books/lean-implementation/
 
 # External SimpleCADAPI test inputs belong in the sibling SimpleCADAPI project
 test_models/
 
-# Generated validation artifacts
-test_runs/
+# Generated validation artifacts. Keep the small, self-contained offline gate
+# and synthetic benchmark sources available to public checkouts.
+test_runs/*
+!test_runs/
+!test_runs/e2e_gate.py
+!test_runs/e2e_gate_live.py
+!test_runs/synthetic_retrieval_benchmark.py
+!test_runs/synthetic_benchmark_queries.json
+
+# Local-only control-systems corpus and its live benchmark harness
+scripts/ops/live_control_systems_ingestion.py
+tests/test_control_systems_adversarial_benchmark.py
+test_runs/control_systems_*
+test_runs/feedback_control_systems_*
 
 # Generated extraction outputs (course content — never commit)
 data/textbook_extracts/

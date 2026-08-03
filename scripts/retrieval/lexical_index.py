@@ -5,9 +5,9 @@ formulas, course codes, acronyms, and headings as searchable terms. The index
 is persisted to disk as a JSON file so it can be reused across queries.
 
 Usage:
-    python scripts/lexical_index.py build --root ~/hermes_related/Cornell_KB
-    python scripts/lexical_index.py search "kanban" --top 5
-    python scripts/lexical_index.py search "DG/(1+DGH)" --index-path data/lexical_index.json --top 5
+    python scripts/retrieval/lexical_index.py build --root .
+    python scripts/retrieval/lexical_index.py search "kanban" --top 5
+    python scripts/retrieval/lexical_index.py search "DG/(1+DGH)" --index-path data/lexical_index.json --top 5
 """
 
 from __future__ import annotations

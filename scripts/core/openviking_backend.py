@@ -28,8 +28,6 @@ SUPPORTED_EXTENSIONS = frozenset({
 
 CURATED_SOURCE_PATHS = frozenset({
     "config/course_catalog.yaml",
-    "data/freq_response_diagrams.json",
-    "data/freq_response_part2.json",
 })
 METADATA_FILTER_KEYS = frozenset({"course", "lecture", "source_type", "source_scope", "semester", "date"})
 SOURCE_SCOPES = frozenset({"course", "assessment", "all"})
@@ -227,10 +225,9 @@ def resource_uri(
         identity_parts.append(source_hash.casefold())
     identity = "/".join(identity_parts)
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
-    # Derive a disambiguated stem.  When multiple files share the same
-    # filename in different subdirectories (e.g.  books/lean-implementation/
-    # */SKILL.md), include the immediate parent directory so stems do not
-    # collide and trigger SourceHashMismatch.
+    # Derive a disambiguated stem. When multiple files share the same filename
+    # in different subdirectories, include the immediate parent directory so
+    # stems do not collide and trigger SourceHashMismatch.
     stem = path.stem
     if display_path and "/" in display_path:
         parent = Path(display_path).parent.name

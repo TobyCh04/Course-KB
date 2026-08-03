@@ -6,16 +6,16 @@ auditable cleanup with a dry-run mode.
 
 Usage:
     # Dry-run: show what would be removed without touching anything.
-    python scripts/test_cleanup.py --manifest config/source_manifest.json --dry-run
+    python scripts/ops/test_cleanup.py --manifest config/source_manifest.json --dry-run
 
     # Remove specific test URIs.
-    python scripts/test_cleanup.py --uris viking://.../test1 viking://.../test2
+    python scripts/ops/test_cleanup.py --uris viking://.../test1 viking://.../test2
 
     # Remove all resources matching a pattern.
-    python scripts/test_cleanup.py --pattern "E2E-TEST"
+    python scripts/ops/test_cleanup.py --pattern "E2E-TEST"
 
     # Remove all resources with corpus=test in the manifest.
-    python scripts/test_cleanup.py --test-only --manifest config/source_manifest.json
+    python scripts/ops/test_cleanup.py --test-only --manifest config/source_manifest.json
 """
 
 from __future__ import annotations

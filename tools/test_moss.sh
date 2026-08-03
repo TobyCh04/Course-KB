@@ -1,12 +1,28 @@
-#!/bin/bash
-source $HOME/.local/bin/env
-source ~/vllm-env/bin/activate
+#!/usr/bin/env bash
+set -euo pipefail
+
+audio_path="${1:-}"
+if [[ -z "$audio_path" ]]; then
+  printf 'Usage: %s AUDIO_FILE\n' "$0" >&2
+  exit 2
+fi
+
+if [[ -f "$HOME/.local/bin/env" ]]; then
+  # shellcheck disable=SC1091
+  source "$HOME/.local/bin/env"
+fi
+if [[ -f "${VLLM_VENV:-$HOME/vllm-env}/bin/activate" ]]; then
+  # shellcheck disable=SC1091
+  source "${VLLM_VENV:-$HOME/vllm-env}/bin/activate"
+fi
 
 echo "=== Installing MOSS dependencies ==="
 pip install -q git+https://github.com/OpenMOSS/MOSS-Transcribe-Diarize.git 2>&1
 
 echo "=== Running MOSS transcription ==="
+export CORNELL_KB_MOSS_AUDIO_PATH="$audio_path"
 python3 << 'PYEOF'
+import os
 import torch
 import time
 from transformers import AutoModelForCausalLM, AutoProcessor
@@ -18,7 +34,7 @@ from moss_transcribe_diarize.inference_utils import (
 )
 
 model_id = "OpenMOSS-Team/MOSS-Transcribe-Diarize"
-audio_path = "/mnt/c/Users/31163/Downloads/Test.m4a"
+audio_path = os.environ["CORNELL_KB_MOSS_AUDIO_PATH"]
 
 device = resolve_device("auto")
 dtype = torch.bfloat16 if device.type == "cuda" else torch.float32

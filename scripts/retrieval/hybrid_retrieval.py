@@ -4,8 +4,8 @@ Combines OpenViking dense results with a local BM25 lexical index using
 Reciprocal Rank Fusion (RRF), then optionally reranks with a cross-encoder.
 
 Usage:
-    python scripts/hybrid_retrieval.py search "kanban" --index-path data/lexical_index.json
-    python scripts/hybrid_retrieval.py ab "DG/(1+DGH)" --index-path data/lexical_index.json
+    python scripts/retrieval/hybrid_retrieval.py search "kanban" --index-path data/lexical_index.json
+    python scripts/retrieval/hybrid_retrieval.py ab "DG/(1+DGH)" --index-path data/lexical_index.json
 """
 
 

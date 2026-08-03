@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-try:  # Supports both `python scripts/chunker.py` and `import scripts.notes.chunker`.
+try:  # Supports both direct execution and `import scripts.notes.chunker`.
     from ..core.common_client import DeepSeekClient, JsonHttpClient, load_api_key
 except ImportError:  # pragma: no cover - direct CLI use
     from scripts.core.common_client import DeepSeekClient, JsonHttpClient, load_api_key

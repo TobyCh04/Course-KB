@@ -228,7 +228,8 @@ tags:
 
 ### 3.3 Installed vault artifacts
 
-The active vault is `C:/Users/TobyC/obsidian-vault/`.
+The active vault is configured by the `--vault-root` argument; a common local
+default is `~/obsidian-vault/`.
 
 - Reusable templates: `Templates/Cornell Lecture Note.md`, `Templates/Cornell Concept Note.md`, `Templates/Cornell Assessment Review.md`, and `Templates/Cornell Course Index.md`.
 - Templates core-plugin configuration: `.obsidian/core-plugins.json` enables `templates`; `.obsidian/templates.json` sets the default folder to `Templates`.
@@ -264,11 +265,11 @@ For each new course, complete in order:
 - [ ] **Register the course** — Add entry to `config/course_namespaces.yaml`
 - [ ] **Create directory structure** — `courses/<course_slug>/` with subdirs
 - [ ] **Write manifest** — Create `config/manifests/<course_slug>.json` or add to `config/source_manifest.json`
-- [ ] **Compute hashes** — Run `python scripts/source_manifest.py validate --manifest <path>` to verify all hashes
-- [ ] **Run preflight** — `python scripts/preflight.py` (Gate A)
+- [ ] **Compute hashes** — Run `python scripts/ingestion/source_manifest.py validate --manifest <path>` to verify all hashes
+- [ ] **Run preflight** — `python scripts/ingestion/preflight.py` (Gate A)
 - [ ] **Run e2e gate offline** — `python test_runs/e2e_gate.py` (Gate A)
 - [ ] **Run e2e gate live** — `python test_runs/e2e_gate.py --live` (Gate B)
-- [ ] **Ingest** — `python scripts/source_manifest.py` (or call `ingest_manifest()`)
+- [ ] **Ingest** — `python scripts/ingestion/source_manifest.py` (or call `ingest_manifest()`)
 - [ ] **Verify** — Search for a known fact, check source read-back
 - [ ] **Generate notes** — Run note generator for each lecture
 - [ ] **Sync to Obsidian** — Run `python scripts/ops/obsidian_sync.py --once` or keep `--watch` running; verify notes appear under the registered course path
@@ -284,8 +285,8 @@ For each new course, complete in order:
 | Namespace registry | `config/course_namespaces.yaml` |
 | Manifest template | `config/course_manifest_template.json` |
 | Obsidian output | `~/obsidian-vault/Cornell/<Course Code>/` |
-| Pre-ingestion gate | `python scripts/preflight.py` |
+| Pre-ingestion gate | `python scripts/ingestion/preflight.py` |
 | E2E gate | `python test_runs/e2e_gate.py [--live]` |
 | Ingestion log | `logs/ingestion_<date>.jsonl` |
-| Snapshot before/after | `python scripts/resource_inventory.py snapshot` |
-| Cleanup test resources | `python scripts/test_cleanup.py --test-only` |
+| Snapshot before/after | `python scripts/ops/resource_inventory.py snapshot` |
+| Cleanup test resources | `python scripts/ops/test_cleanup.py --test-only` |

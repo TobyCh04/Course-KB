@@ -1,7 +1,7 @@
 # Cornell-KB Luna → Model-Routed Working Framework
 
 **Status:** Active project operating contract
-**Project:** `C:/Users/TobyC/hermes_related/Cornell_KB/`
+**Project:** `<project-root>/Cornell_KB/`
 **Primary model:** GPT-5.6 Luna
 **Hermes delegation target:** `deepseek-v4-pro` through the DeepSeek API
 **Cornell-KB script model:** DeepSeek V4 Pro through the DeepSeek API
@@ -194,7 +194,7 @@ Exact commands to run, for example:
 
 - `python -m pytest -q tests/test_specific.py`
 - `python -m py_compile scripts/module.py`
-- `python scripts/source_manifest.py validate --manifest config/source_manifest.json --root .`
+- `python scripts/ingestion/source_manifest.py validate --manifest config/source_manifest.json --root .`
 - `git diff --check`
 - A named live read-only OpenViking query when explicitly authorized
 
