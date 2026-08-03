@@ -46,8 +46,20 @@ books/lean-implementation/
 # External SimpleCADAPI test inputs belong in the sibling SimpleCADAPI project
 test_models/
 
-# Generated validation artifacts
-test_runs/
+# Generated validation artifacts. Keep the small, self-contained offline gate
+# and synthetic benchmark sources available to public checkouts.
+test_runs/*
+!test_runs/
+!test_runs/e2e_gate.py
+!test_runs/e2e_gate_live.py
+!test_runs/synthetic_retrieval_benchmark.py
+!test_runs/synthetic_benchmark_queries.json
+
+# Local-only control-systems corpus and its live benchmark harness
+scripts/ops/live_control_systems_ingestion.py
+tests/test_control_systems_adversarial_benchmark.py
+test_runs/control_systems_*
+test_runs/feedback_control_systems_*
 
 # Generated extraction outputs (course content — never commit)
 data/textbook_extracts/
