@@ -5,12 +5,20 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from test_runs.control_systems_adversarial_benchmark import (
     DEFAULT_CORPUS,
     DEFAULT_QUERIES,
     _read_source,
     _load_manifest,
     run_benchmark,
+)
+
+
+pytestmark = pytest.mark.skipif(
+    not DEFAULT_CORPUS.is_file() or not DEFAULT_QUERIES.is_file(),
+    reason="optional adversarial benchmark corpus was cleaned; regenerate it for benchmark tests",
 )
 
 

@@ -48,6 +48,7 @@ EXTRACTION_ENGINES = frozenset({
     "glm-ocr",
     "qwen3-vl:8b",
     "deepseek-v4-pro",
+    "deepseek-v4-flash",
 })
 
 

@@ -34,7 +34,11 @@ if os.path.exists(nvidia_base):
 
 DEFAULT_OUTPUT_DIR = os.environ.get(
     "CORNELL_KB_OUTPUT_DIR",
-    str(_sys_root / "data" / "artifacts" / "media"),
+    str(
+        _Path(os.environ.get("CORNELL_KB_COURSE_ROOT", "C:/Mine/SC Files/Grad"))
+        / "_unassigned"
+        / "Review"
+    ),
 )
 OLLAMA_URL = os.environ.get(
     "CORNELL_KB_OLLAMA_URL", "http://127.0.0.1:11434/api/generate"

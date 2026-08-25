@@ -124,7 +124,7 @@ processing:
 output:
   # Base directory for deterministic artifacts.  Individual files use the
   # pattern <output_dir>/<sha256>_<label>.txt so repeated runs are idempotent.
-  base_dir: "artifacts/laptop_pipeline"
+  base_dir: "C:/Mine/SC Files/Grad"
 
   # Machine-readable manifest written after a pipeline run.
   manifest_file: "pipeline_manifest.json"

@@ -1,9 +1,10 @@
-"""Tests for the DeepSeek V4 Pro routing hardening in note_generator.
+"""Tests for the DeepSeek routing hardening in note_generator.
 
-Cornell-KB note generation must use a single text LLM route: DeepSeek V4 Pro
-through the official DeepSeek API. These tests verify the openai/ollama
-text-generation backends have been removed and that ``call_llm`` routes through
-``common_client.DeepSeekClient`` with the canonical model/endpoint/credential.
+Cornell-KB note generation must use one text LLM provider route: the official
+DeepSeek API. V4 Pro is the default and V4 Flash is an explicit lower-cost
+tier. These tests verify the openai/ollama text-generation backends have been
+removed and that ``call_llm`` routes through ``common_client.DeepSeekClient``
+with the canonical endpoint/credential.
 
 No test contacts a real provider: a fake ``deepseek_client`` is injected so the
 DeepSeek API key and network are never required.
@@ -34,6 +35,7 @@ def test_removed_helpers_are_gone():
 def test_canonical_deepseek_constants():
     assert ng.DEEPSEEK_API_URL == "https://api.deepseek.com/v1/chat/completions"
     assert ng.DEFAULT_MODEL == "deepseek-v4-pro"
+    assert ng.ALLOWED_MODELS == {"deepseek-v4-pro", "deepseek-v4-flash"}
 
 
 # ── call_llm routing ────────────────────────────────────────────────────────
@@ -118,15 +120,12 @@ def test_call_llm_ollama_url_parameter_is_accepted_but_ignored():
     assert len(fake.calls) == 1
 
 
-def test_call_llm_rejects_flash_model_override():
-    """All Cornell text generation is pinned to DeepSeek V4 Pro."""
+def test_call_llm_accepts_explicit_flash_model_override():
+    """Flash is available for explicit draft/bulk note-generation passes."""
     fake = _FakeDeepSeekClient()
-    try:
-        ng.call_llm("p", model="deepseek-v4-flash", api_key="k", deepseek_client=fake)
-    except ValueError as exc:
-        assert "deepseek-v4-pro" in str(exc)
-    else:
-        raise AssertionError("deepseek-v4-flash override should be rejected")
+    result = ng.call_llm("p", model="deepseek-v4-flash", api_key="k", deepseek_client=fake)
+    assert result == "synthesized note body"
+    assert fake.calls[0]["model"] == "deepseek-v4-flash"
 
 
 # ── CLI surface ─────────────────────────────────────────────────────────────
@@ -162,6 +161,7 @@ def test_cli_rejects_openai_backend_choice():
     assert "openai" in (result.stderr + result.stdout).lower()
 
 
-def test_default_note_output_path_targets_sync_staging_tree():
+def test_default_note_output_path_targets_syncthing_notes_folder():
     path = ng.default_note_output_path("SYSEN 5100", 3)
-    assert path.endswith("courses\\sysen-5100\\derived\\notes\\Lecture03.md")
+    normalized = str(path).replace("\\", "/")
+    assert normalized.endswith("/SYSEN 5100/Notes/Lecture 03.md")

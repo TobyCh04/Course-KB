@@ -426,7 +426,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output-dir", default=None,
-        help="Directory for artifacts (default: output.base_dir from config).",
+        help="Directory for artifacts (default: <course root>/<Course Code>/Review from config).",
     )
     parser.add_argument(
         "--course", default=None,
@@ -452,8 +452,13 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     config = load_pipeline_config(args.config)
     output_defaults = config.get("output", {})
-    output_dir = Path(args.output_dir or output_defaults.get("base_dir", "artifacts/laptop_pipeline"))
     course = args.course if args.course is not None else config.get("courses", {}).get("default")
+    base_output = Path(output_defaults.get("base_dir", "C:/Mine/SC Files/Grad"))
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+    else:
+        course_folder = str(course).strip() if course else "_unassigned"
+        output_dir = base_output / course_folder / "Review"
     manifest_name = output_defaults.get("manifest_file", "pipeline_manifest.json")
     manifest_path = Path(args.manifest) if args.manifest else output_dir / manifest_name
 

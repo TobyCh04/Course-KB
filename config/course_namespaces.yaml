@@ -10,6 +10,18 @@
 #   semester:      When the course runs (FA26, SP27, etc.)
 #   status:        active | planned | archived
 
+storage:
+  # Syncthing-managed local course-material root. Obsidian is the separate note destination.
+  root: "C:/Mine/SC Files/Grad"
+  template_course: "ORIE 5100"
+  folder_template:
+    - Exams
+    - Homework
+    - Notes
+    - Recordings
+    - Review
+    - Slides
+
 courses:
 
   # ── Fall 2026 ──────────────────────────────────────────────────────────
@@ -50,15 +62,15 @@ courses:
     credits: 4
     status: planned
 
-  "SYSEN 5680":
-    slug: sysen-5680
-    name: "Optimal Control and Decision Theory"
-    openviking: viking://resources/cornell-kb/sysen-5680
-    obsidian: "Cornell/SYSEN 5680"
+  "ENGRG 5350":
+    slug: engrg-5350
+    name: "Career Search and Exploration for Engineers"
+    openviking: viking://resources/cornell-kb/engrg-5350
+    obsidian: "Cornell/ENGRG 5350"
     semester: FA26
-    credits: 4
+    credits: 1
     status: planned
-    note: "Registered course"
+    note: "Fall 2026 course-plan replacement for SYSEN 5680"
 
   # ── Spring 2027 ────────────────────────────────────────────────────────
 

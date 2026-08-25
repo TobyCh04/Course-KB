@@ -136,6 +136,30 @@ def test_generate_notes_can_omit_or_externalize_raw_sources_without_network_call
     assert "private transcript detail" not in externalized
 
 
+def test_generate_notes_quotes_colon_in_topic_frontmatter():
+    def fake_synthesis(_prompt, **_kwargs):
+        return (
+            "---\n"
+            "date: 2026-08-24\n"
+            "course: ORIE 5100\n"
+            "lecture: 1\n"
+            "topic: Manufacturing Systems Design: Course Introduction\n"
+            "---\n"
+            "# Lecture 1\n"
+        )
+
+    note = ng.generate_notes(
+        course_code="ORIE 5100",
+        lecture=1,
+        topic="Manufacturing Systems Design: Course Introduction",
+        run_fact_check=False,
+        source_mode="none",
+        llm_call=fake_synthesis,
+    )
+
+    assert 'topic: "Manufacturing Systems Design: Course Introduction"' in note
+
+
 def test_cli_exposes_bounded_worker_and_source_output_controls():
     import subprocess
 

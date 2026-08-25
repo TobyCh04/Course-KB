@@ -46,17 +46,17 @@ def _shared_http_client(timeout):
 
 # ── LLM Backend Configuration ──────────────────────────────────────────────
 #
-# Cornell-KB note generation is hardened to a single text LLM route: DeepSeek
-# V4 Pro through the official DeepSeek API. Alternate cloud (OpenAI) and local
-# (Ollama text-generation) backends have been removed from the generation path
-# to keep the Cornell script model consistent with the Hermes delegation route
-# (see references/deepseek-v4-pro-routing.md). Local OCR/vision/STT engines
-# (Qwen3-VL, GLM-OCR, Whisper, MOSS) remain separate media components and are
-# NOT affected by this routing — they live in diagrams.py and transcribe.py.
+# Cornell-KB note generation uses one text provider route with two explicit
+# DeepSeek quality tiers. V4 Pro is the default/final-quality tier; V4 Flash is
+# available for an intentional high-volume or draft pass. Alternate cloud
+# (OpenAI) and local (Ollama text-generation) backends remain removed from the
+# generation path. Local OCR/vision/STT engines (Qwen3-VL, GLM-OCR, Whisper,
+# MOSS) remain separate media components and are NOT affected by this routing.
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 DEFAULT_MODEL = "deepseek-v4-pro"
 DEFAULT_BACKEND = "deepseek"  # retained for backward-compatible call signatures
+ALLOWED_MODELS = {"deepseek-v4-pro", "deepseek-v4-flash"}
 
 # Single allowed backend. ``call_llm`` rejects any other value so a stale
 # caller cannot silently fall back to a removed cloud/local route.
@@ -64,7 +64,10 @@ ALLOWED_BACKENDS = {"deepseek"}
 
 HINDSIGHT_URL = "http://localhost:8888"
 PROJECT_ROOT = _Path(__file__).resolve().parents[2]
-DEFAULT_OUTPUT_DIR = str(PROJECT_ROOT / "courses")
+DEFAULT_COURSE_ROOT = _Path(
+    os.environ.get("CORNELL_KB_COURSE_ROOT", "C:/Mine/SC Files/Grad")
+).expanduser()
+DEFAULT_OUTPUT_DIR = str(DEFAULT_COURSE_ROOT)
 
 
 # ── API Key Loading ────────────────────────────────────────────────────────
@@ -78,11 +81,12 @@ def load_api_key(key_name="DEEPSEEK_API_KEY"):
 
 def call_llm(prompt, backend=DEFAULT_BACKEND, model=None, api_key=None, api_url=None,
              ollama_url=None, http_client=None, deepseek_client=None):
-    """Call the DeepSeek V4 Pro chat completion API and return the response text.
+    """Call the selected DeepSeek model and return the response text.
 
-    Cornell-KB note generation uses a single hardened text LLM route: DeepSeek
-    V4 Pro via the official DeepSeek API (endpoint ``DEEPSEEK_API_URL``, model
-    ``DEFAULT_MODEL``, credential ``DEEPSEEK_API_KEY`` from the shared loader).
+    Cornell-KB note generation uses the official DeepSeek API (endpoint
+    ``DEEPSEEK_API_URL``) with V4 Pro as the default and V4 Flash as an explicit
+    lower-cost option. The credential is ``DEEPSEEK_API_KEY`` from the shared
+    loader.
     The ``ollama_url`` parameter is accepted for backward-compatible call sites
     but is intentionally unused — local Ollama text generation is no longer an
     allowed Cornell generation backend. Local OCR/vision engines in
@@ -97,12 +101,13 @@ def call_llm(prompt, backend=DEFAULT_BACKEND, model=None, api_key=None, api_url=
         raise ValueError(
             f" Cornell-KB note generation only permits the 'deepseek' backend "
             f"(got {backend!r}). OpenAI and Ollama text-generation backends have "
-            f"been removed; use DeepSeek V4 Pro via the DeepSeek API."
+            f"been removed; use DeepSeek via the DeepSeek API."
         )
 
     model = model or DEFAULT_MODEL
-    if model != DEFAULT_MODEL:
-        raise ValueError(f"Cornell-KB requires {DEFAULT_MODEL}; got {model!r}")
+    if model not in ALLOWED_MODELS:
+        allowed = ", ".join(sorted(ALLOWED_MODELS))
+        raise ValueError(f"Cornell-KB permits DeepSeek models {{{allowed}}}; got {model!r}")
     url = api_url or DEEPSEEK_API_URL
     resolved_key = api_key or load_api_key("DEEPSEEK_API_KEY")
     if not resolved_key:
@@ -185,7 +190,7 @@ Generate comprehensive lecture notes in this EXACT format (Obsidian-compatible M
 date: {date}
 course: {course_code}
 lecture: {lecture}
-topic: {topic}
+topic: "{topic}"
 source_type: synthesis
 extraction_engine: deepseek-v4-pro
 generated: {date}
@@ -1009,14 +1014,13 @@ def build_source_verification(transcript_text, facts, diagrams, mode="inline", e
 # ── Output ─────────────────────────────────────────────────────────────────
 
 def default_note_output_path(course_code, lecture):
-    """Return the generated-note staging path consumed by obsidian_sync."""
-    course_slug = re.sub(r"[^a-z0-9]+", "-", str(course_code).lower()).strip("-")
+    """Return the generated-note path in the Syncthing course Notes folder."""
+    course_folder = str(course_code).strip()
     return os.path.join(
         DEFAULT_OUTPUT_DIR,
-        course_slug,
-        "derived",
-        "notes",
-        f"Lecture{int(lecture):02d}.md",
+        course_folder,
+        "Notes",
+        f"Lecture {int(lecture):02d}.md",
     )
 
 
@@ -1064,6 +1068,31 @@ def retain_to_hindsight(note_text, course_code, lecture, topic, url=HINDSIGHT_UR
     except Exception as error:
         print(f"Hindsight retention failed: {error}")
         return {"error": str(error)}
+
+
+def _normalize_topic_frontmatter(note_text):
+    """Quote the YAML topic scalar so colons cannot break frontmatter parsing."""
+    if not note_text.startswith("---"):
+        return note_text
+
+    lines = note_text.splitlines()
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            break
+        match = re.match(r"^(\s*topic:\s*)(.*)$", line)
+        if not match:
+            continue
+        value = match.group(2).strip()
+        if value and not (
+            (value.startswith('"') and value.endswith('"'))
+            or (value.startswith("'") and value.endswith("'"))
+        ):
+            lines[index] = f"{match.group(1)}{json.dumps(value, ensure_ascii=False)}"
+        break
+
+    newline = chr(13) + chr(10) if chr(13) + chr(10) in note_text else chr(10)
+    rendered = newline.join(lines)
+    return rendered + (newline if note_text.endswith(chr(10)) else "")
 
 
 # ── Main ───────────────────────────────────────────────────────────────────
@@ -1118,6 +1147,8 @@ def generate_notes(transcript_text=None, facts=None, diagrams=None,
         note_text = note_text[len("```\n"):]
     if note_text.endswith("\n```"):
         note_text = note_text[:-len("\n```")]
+
+    note_text = _normalize_topic_frontmatter(note_text)
 
     # Step 2: Fact-check pass (batched by section)
     if run_fact_check:
@@ -1197,10 +1228,11 @@ def main():
     parser.add_argument("--lecture", type=int, required=True, help="Lecture number")
     parser.add_argument("--topic", default="Lecture Content", help="Lecture topic name")
 
-    # LLM backend (hardened to DeepSeek V4 Pro via the official DeepSeek API)
+    # LLM backend (DeepSeek V4 Pro default; V4 Flash explicit bulk/draft tier)
     parser.add_argument("--backend", default=DEFAULT_BACKEND, choices=sorted(ALLOWED_BACKENDS),
                         help="LLM backend (only 'deepseek' is supported; default: deepseek)")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="Override model name (default: deepseek-v4-pro)")
+    parser.add_argument("--model", default=DEFAULT_MODEL, choices=sorted(ALLOWED_MODELS),
+                        help="DeepSeek model (default: deepseek-v4-pro; flash is the lower-cost draft tier)")
     parser.add_argument("--api-key", help="Override DeepSeek API key (default: DEEPSEEK_API_KEY)")
     parser.add_argument("--api-url", default=DEEPSEEK_API_URL,
                         help="Override DeepSeek chat completion endpoint (default: https://api.deepseek.com/v1/chat/completions)")
@@ -1210,7 +1242,7 @@ def main():
                         help="(deprecated, ignored) Ollama text generation is no longer used; use diagrams.py/transcribe.py for local vision/OCR.")
 
     # Output
-    parser.add_argument("--output", help="Output file path (default: project/courses/<course_slug>/derived/notes/LectureNN.md; watcher syncs it to Obsidian)")
+    parser.add_argument("--output", help="Output file path (default: C:/Mine/SC Files/Grad/<Course Code>/Notes/Lecture NN.md; syncs to Obsidian)")
     parser.add_argument("--retain", action="store_true", help="Retain summary into Hindsight")
     parser.add_argument("--hindsight-url", default=HINDSIGHT_URL, help="Hindsight API URL")
     parser.add_argument("--no-fact-check", action="store_true", help="Skip fact-check pass")

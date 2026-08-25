@@ -30,8 +30,8 @@ data/lexical_index.json
 data/artifacts/
 logs/
 
-# Local course material and per-user manifests. The checked-in manifest is a
-# synthetic fixture only; real source paths and hashes stay outside Git.
+# Legacy project-local course material guard. Real course material and generated
+# Cornell-KB artifacts live under C:/Mine/SC Files/Grad instead.
 courses/
 config/manifests/
 

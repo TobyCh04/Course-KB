@@ -25,33 +25,32 @@ Derived from the course code by lowercasing and replacing spaces with hyphens:
 | ORIE 5100   | `orie-5100`   |
 | SYSEN 5530  | `sysen-5530`  |
 
-### 1.3 Source files
+### 1.3 Course-material folders
 
-Place course material in a dedicated directory under the project root:
+Place all private course material and Cornell-KB generated artifacts under the
+Syncthing-managed root `C:/Mine/SC Files/Grad`. Use the ORIE 5100 folder as the
+structural template for every course:
 
 ```
-<project_root>/
-  courses/
-    <course_slug>/
-      lectures/
-        lecture_01_slides.pdf
-        lecture_01_transcript.txt
-        lecture_02_slides.pdf
-        ...
-      textbooks/
-        <author>_<title_slug>.pdf
-      homework/
-        hw1.pdf
-        hw2.pdf
-      exams/
-        midterm.pdf
-        final.pdf
-      derived/
-        lecture_01_ocr.txt        # OCR output from scanned slides
-        lecture_01_diagrams.json  # Extracted diagram descriptions
-        notes/
-          lecture_01_notes.md     # Generated Obsidian notes
+C:/Mine/SC Files/Grad/
+  <Course Code>/
+    Exams/
+    Homework/
+    Notes/             # canonical generated Markdown; synced to Obsidian
+    Recordings/        # audio and raw transcripts
+    Review/            # study guides, mock exams, sample questions
+      Provenance/      # transcript-review and pipeline artifacts
+    Slides/
 ```
+
+For example:
+
+```
+C:/Mine/SC Files/Grad/SYSEN 5100/Recordings/lecture_01_transcript.txt
+C:/Mine/SC Files/Grad/SYSEN 5100/Notes/Lecture 01 - Introduction.md
+C:/Mine/SC Files/Grad/SYSEN 5100/Review/Study Guides/Lecture 01.md
+```
+
 
 ### 1.4 Manifest entries
 
@@ -60,7 +59,7 @@ manifest). Required fields:
 
 ```json
 {
-  "source_path": "courses/sysen-5100/lectures/lecture_01_slides.pdf",
+  "source_path": "SYSEN 5100/Recordings/lecture_01_slides.pdf",
   "source_hash": "<full 64-char SHA-256>",
   "source_type": "slides",
   "course": "SYSEN 5100",
@@ -75,7 +74,7 @@ manifest). Required fields:
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `source_path` | ✅ | Relative to project root |
+| `source_path` | ✅ | Relative to `C:/Mine/SC Files/Grad` |
 | `source_hash` | ✅ | Full SHA-256 of file bytes |
 | `source_type` | ✅ | One of: `textbook`, `slides`, `transcript`, `homework`, `exam`, `ocr_text`, `diagram_description`, `synthesis` |
 | `course` | ✅ | Official code with space |
@@ -103,14 +102,14 @@ When a source is scanned (no digital text), add the derived text:
 
 ```json
 {
-  "source_path": "courses/sysen-5100/lectures/lecture_02_ocr.txt",
+  "source_path": "SYSEN 5100/Review/Provenance/Lecture 02/lecture_02_ocr.txt",
   "source_hash": "<sha256 of the .txt file>",
   "source_type": "ocr_text",
   "course": "SYSEN 5100",
   "lecture": 2,
   "semester": "FA26",
   "corpus": "course",
-  "derived_text_path": "courses/sysen-5100/lectures/lecture_02_scanned.pdf",
+  "derived_text_path": "SYSEN 5100/Slides/lecture_02_scanned.pdf",
   "derived_hash": "<sha256 of the original scanned PDF>"
 }
 ```
@@ -235,7 +234,7 @@ default is `~/obsidian-vault/`.
 - Templates core-plugin configuration: `.obsidian/core-plugins.json` enables `templates`; `.obsidian/templates.json` sets the default folder to `Templates`.
 - Registered-course index: `Cornell/Registered Courses.md`.
 - Each registered course has physical `Lectures/`, `Notes/`, `Homework/`, `Exams/`, and `Diagrams/` folders plus a `Course Index.md`.
-- The current registered plan is SYSEN 5100, SYSEN 5930, SYSEN 5900, ORIE 5100, SYSEN 5680, SYSEN 5211, SYSEN 5530, SYSEN 5410, and SYSEN 5381.
+- The current registered plan is SYSEN 5100, SYSEN 5930, SYSEN 5900, ORIE 5100, ENGRG 5350, SYSEN 5211, SYSEN 5530, SYSEN 5410, and SYSEN 5381.
 
 ### 3.4 Frontmatter fields
 
@@ -263,8 +262,8 @@ default is `~/obsidian-vault/`.
 For each new course, complete in order:
 
 - [ ] **Register the course** — Add entry to `config/course_namespaces.yaml`
-- [ ] **Create directory structure** — `courses/<course_slug>/` with subdirs
-- [ ] **Write manifest** — Create `config/manifests/<course_slug>.json` or add to `config/source_manifest.json`
+- [ ] **Create directory structure** — `C:/Mine/SC Files/Grad/<Course Code>/` using the ORIE 5100 template
+- [ ] **Write manifest** — Create `C:/Mine/SC Files/Grad/<Course Code>/Review/Provenance/<course_slug>.json` or use the checked-in synthetic `config/source_manifest.json`
 - [ ] **Compute hashes** — Run `python scripts/ingestion/source_manifest.py validate --manifest <path>` to verify all hashes
 - [ ] **Run preflight** — `python scripts/ingestion/preflight.py` (Gate A)
 - [ ] **Run e2e gate offline** — `python test_runs/e2e_gate.py` (Gate A)
@@ -280,8 +279,8 @@ For each new course, complete in order:
 
 | What | Where |
 |------|-------|
-| Source files | `courses/<slug>/` |
-| Manifest | `config/source_manifest.json` or `config/manifests/<slug>.json` |
+| Source files and course artifacts | `C:/Mine/SC Files/Grad/<Course Code>/` |
+| Manifest | `C:/Mine/SC Files/Grad/<Course Code>/Review/Provenance/` (private) or `config/source_manifest.json` (synthetic) |
 | Namespace registry | `config/course_namespaces.yaml` |
 | Manifest template | `config/course_manifest_template.json` |
 | Obsidian output | `~/obsidian-vault/Cornell/<Course Code>/` |

@@ -1,8 +1,27 @@
 # Cornell-KB Project Status
 
-**Last updated:** 2026-07-25
+**Last updated:** 2026-08-24
 **Branch:** `master`
-**Working tree:** live-read gate added; generated live-run outputs remain ignored
+**Working tree:** canonical course-material root moved to Syncthing storage; generated live-run outputs remain ignored
+
+## Canonical course-material storage
+
+- Course materials and Cornell-KB generated artifacts are stored only under `C:/Mine/SC Files/Grad` outside the Obsidian vault.
+- Every course uses the ORIE 5100 template: `Exams/`, `Homework/`, `Notes/`, `Recordings/`, `Review/`, and `Slides/`.
+- `Notes/` is the canonical generated Markdown source; the configured Obsidian note is its managed synchronized copy.
+- `Review/` is for study guides, mock exams, and sample questions. Transcript-review/provenance artifacts are kept under `Review/Provenance/<Lecture>/`.
+
+## Real course material — ORIE 5100 Lecture 1 (2026-08-24) ✅ pipeline complete
+
+- Source: `C:/Mine/SC Files/Grad/ORIE 5100/Recordings/ORIE 5100 lec 1.pipeline-test.txt` — 81,833 bytes; SHA-256 `aa0d786455d659454b0b8dda7d40cf1bc894c86c86b7802eeddf766e00a8f505`.
+- Transcript: Whisper `large-v3-turbo`, 4,193.6 seconds, 884 timestamped segments.
+- Deterministic checks: timestamp order/ranges/non-empty text passed; no gaps or overlaps; 17 repeated segment-text warnings.
+- Luna review: 7 chunks through `openai-codex` / `gpt-5.6-luna`; 40 findings (27 minor, 13 major); 6 conservative exact-match corrections applied. Final transcript status is `needs_review`, not clean.
+- DeepSeek notes: generated with `deepseek-v4-pro`; formula fact-check 5/5 verified, with additional definition/concept/example/diagram checks recorded in the note.
+- Artifacts: `C:/Mine/SC Files/Grad/ORIE 5100/Review/Provenance/Lecture 01/` (verified transcript, review JSON, source sidecar, orchestration manifest, review report, and Luna usage records).
+- Production note source: `C:/Mine/SC Files/Grad/ORIE 5100/Notes/Lecture 01 - Manufacturing Systems Design - Course Introduction and Manufacturing Systems Decisions.md`; synced to `Cornell/ORIE 5100/Lectures/Lecture 01 - Manufacturing Systems Design- Course Introduction and Manufacturing Systems Decisions.md` in the configured Obsidian vault.
+- No OpenViking or Hindsight write was performed. OpenViking namespace inventory remained at zero resources before and after this run; production Hindsight was not modified by the pipeline.
+- The local generated test-artifact cleanup removed 684 files (24.8 MB), preserving tracked fixtures, reusable tests/gates, configuration, and documentation. The optional adversarial benchmark tests now skip when their disposable corpus is absent.
 
 ## Live-read gate (2026-07-25) ✅
 

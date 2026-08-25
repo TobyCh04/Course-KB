@@ -8,7 +8,7 @@ LLM.
 Typical usage from the Cornell-KB project root::
 
     python scripts/ops/obsidian_sync.py --once
-    python scripts/ops/obsidian_sync.py --source-root courses --watch
+    python scripts/ops/obsidian_sync.py --source-root "C:/Mine/SC Files/Grad" --pattern "**/Notes/**/*.md" --watch
 
 Generated source notes should contain frontmatter with at least ``course``.
 ``source_type`` and ``lecture`` are recommended; the sync layer infers sensible
@@ -35,7 +35,10 @@ except ImportError as exc:  # pragma: no cover - exercised by CLI environments
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SOURCE_ROOT = PROJECT_ROOT / "courses"
+DEFAULT_COURSE_ROOT = Path(
+    os.environ.get("CORNELL_KB_COURSE_ROOT", "C:/Mine/SC Files/Grad")
+).expanduser()
+DEFAULT_SOURCE_ROOT = DEFAULT_COURSE_ROOT
 DEFAULT_REGISTRY = PROJECT_ROOT / "config" / "course_namespaces.yaml"
 DEFAULT_VAULT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", Path.home() / "obsidian-vault")).expanduser()
 
@@ -327,7 +330,7 @@ def sync_once(
     vault_root: Path = DEFAULT_VAULT,
     registry_path: Path = DEFAULT_REGISTRY,
     *,
-    pattern: str = "**/*.md",
+    pattern: str = "**/Notes/**/*.md",
     dry_run: bool = False,
     prune: bool = False,
 ) -> SyncResult:
@@ -405,10 +408,10 @@ def watch(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Sync generated Cornell-KB notes into Obsidian")
-    parser.add_argument("--source-root", type=Path, default=DEFAULT_SOURCE_ROOT, help="Generated-note staging root (default: project/courses)")
+    parser.add_argument("--source-root", type=Path, default=DEFAULT_SOURCE_ROOT, help="Course-material root (default: C:/Mine/SC Files/Grad; override with CORNELL_KB_COURSE_ROOT)")
     parser.add_argument("--vault-root", type=Path, default=DEFAULT_VAULT, help="Obsidian vault root")
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY, help="Course namespace YAML")
-    parser.add_argument("--pattern", default="**/*.md", help="Source glob relative to --source-root")
+    parser.add_argument("--pattern", default="**/Notes/**/*.md", help="Source glob relative to --source-root (default: course Notes folders)")
     parser.add_argument("--once", action="store_true", help="Run one sync pass (the default)")
     parser.add_argument("--watch", action="store_true", help="Poll for new/changed source notes")
     parser.add_argument("--interval", type=float, default=2.0, help="Watch polling interval in seconds")

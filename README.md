@@ -102,21 +102,45 @@ tools/                             Optional Windows/Linux model helpers
 
 ## Typical workflows
 
+### Course-material storage
+
+The canonical local course-material root is the Syncthing-managed directory
+`C:/Mine/SC Files/Grad`. The Obsidian vault is the only other storage location
+for course notes. The Cornell-KB repository itself contains source code,
+configuration, and tests—not private course materials or generated artifacts.
+
+Every course folder follows the ORIE 5100 template:
+
+```text
+C:/Mine/SC Files/Grad/<Course Code>/
+  Exams/
+  Homework/
+  Notes/             # canonical generated Markdown; synced to Obsidian
+  Recordings/        # audio and raw transcripts
+  Review/            # study guides, mock exams, sample questions
+    Provenance/      # transcript-review and pipeline artifacts
+  Slides/
+```
+
+Set `CORNELL_KB_COURSE_ROOT` only when the root differs from the default.
+
 ### 1. Add local course material
 
-Keep source files under an ignored local directory such as `courses/<course-slug>/`. Start from the template rather than editing the public fixture manifest:
+Keep source files under the course's `Recordings/`, `Slides/`, `Homework/`, or
+`Exams/` folder. Start from the template rather than editing the public fixture
+manifest:
 
 ```bash
-mkdir -p config/manifests courses/my-course
-cp config/course_manifest_template.json config/manifests/my-course.json
+mkdir -p "C:/Mine/SC Files/Grad/MY-COURSE/Review/Provenance"
+cp config/course_manifest_template.json "C:/Mine/SC Files/Grad/MY-COURSE/Review/Provenance/MY-COURSE-manifest.json"
 ```
 
 Fill in relative source paths and SHA-256 hashes, then validate before indexing:
 
 ```bash
 python scripts/ingestion/source_manifest.py validate \
-  --manifest config/manifests/my-course.json \
-  --root .
+  --manifest "C:/Mine/SC Files/Grad/MY-COURSE/Review/Provenance/MY-COURSE-manifest.json" \
+  --root "C:/Mine/SC Files/Grad"
 ```
 
 Use `--no-services --no-git` on preflight when you are checking local structure only. Do not use `--index` or live ingestion until the manifest and provenance checks are green.
@@ -127,9 +151,9 @@ The media pipeline accepts a directory of PDFs, audio, images, or text and write
 
 ```bash
 python scripts/ops/laptop_pipeline.py \
-  --input-dir courses/my-course/incoming \
-  --output-dir data/artifacts/my-course \
-  --course MY-COURSE \
+  --input-dir "C:/Mine/SC Files/Grad/MY-COURSE/Recordings" \
+  --output-dir "C:/Mine/SC Files/Grad/MY-COURSE/Review" \
+  --course "MY-COURSE" \
   --lecture 1
 ```
 
@@ -148,11 +172,12 @@ the supported switch depends on which stage you are running:
 
 | Stage | Current route | How to switch |
 |---|---|---|
-| Note synthesis, fact checking, and corrections | DeepSeek V4 Pro API | Set `DEEPSEEK_API_KEY`; override the compatible endpoint with `--api-url` if needed |
+| Note synthesis, fact checking, and corrections | DeepSeek V4 Pro API by default; V4 Flash explicit draft/bulk tier | Set `DEEPSEEK_API_KEY`; choose `--model` when needed |
 | Diagram descriptions | Ollama, default `qwen3-vl:8b` | Pass `--model` and optionally `--ollama-url` to `scripts/media/diagrams.py` |
 | OCR | Ollama, default `glm-ocr` with `qwen3-vl:8b` fallback | Pass `--engine`, `--fallback-engine`, and `--ollama-url` to `scripts/media/transcribe.py ocr` |
 | Single-speaker transcription | Local faster-whisper, default `large-v3-turbo` | Pass `--model`, `--device`, and `--compute-type` to `scripts/media/transcribe.py transcribe` |
 | Multi-speaker transcription | Local MOSS runtime | Pass `--engine moss` and `--moss-model` to `scripts/media/transcribe.py transcribe` |
+| Transcript review | Hermes `openai-codex` route, `gpt-5.6-luna` | Run `scripts/media/transcript_verifier.py`; raw transcript is preserved |
 
 ### Use the API model for note generation
 
@@ -165,7 +190,7 @@ Set the key in the environment. Bash/macOS/Linux:
 ```bash
 export DEEPSEEK_API_KEY="<your-deepseek-key>"
 python scripts/notes/note_generator.py \
-  --transcript courses/my-course/incoming/lecture.txt \
+  --transcript "C:/Mine/SC Files/Grad/MY-COURSE/Recordings/lecture.txt" \
   --course MY-COURSE \
   --lecture 1 \
   --topic "Lecture topic" \
@@ -177,7 +202,7 @@ PowerShell:
 
 ```powershell
 $env:DEEPSEEK_API_KEY = "<your-deepseek-key>"
-python scripts/notes/note_generator.py --transcript courses/my-course/incoming/lecture.txt --course MY-COURSE --lecture 1 --backend deepseek --model deepseek-v4-pro
+python scripts/notes/note_generator.py --transcript "C:/Mine/SC Files/Grad/MY-COURSE/Recordings/lecture.txt" --course MY-COURSE --lecture 1 --backend deepseek --model deepseek-v4-pro
 ```
 
 The loader checks the environment first, then a `KEY=value` file. Set
@@ -191,12 +216,54 @@ python scripts/notes/note_generator.py ... \
   --api-url "https://api.example.com/v1/chat/completions"
 ```
 
-The current implementation intentionally accepts only the `deepseek` backend
-and `deepseek-v4-pro` model. Switching to an unrelated API provider or model is
-not an environment-only change: update the provider/client validation in
-`scripts/notes/note_generator.py` and `scripts/core/common_client.py`, update
-the generated-note metadata, and add tests before using it. This prevents a
+The current implementation accepts the `deepseek` backend with two explicit
+models: `deepseek-v4-pro` (the default and recommended final-quality tier) and
+`deepseek-v4-flash` (the lower-cost draft/bulk tier). Switching to an unrelated
+API provider is not an environment-only change: update the provider/client
+validation in `scripts/notes/note_generator.py` and `scripts/core/common_client.py`,
+update generated-note metadata, and add tests before using it. This prevents a
 provider-specific request format from being sent to the wrong endpoint.
+
+### Verify a transcript, then generate notes
+
+The end-to-end audio-to-notes command refuses to generate notes unless the
+Luna/Codex review produces a verified transcript sidecar. It writes the raw
+transcript reference, review JSON, corrected sidecar, final notes, source
+sidecar, and an orchestration manifest into one output directory:
+
+```bash
+python scripts/ops/audio_to_notes.py \
+  --transcript "C:/Mine/SC Files/Grad/MY-COURSE/Recordings/lecture.txt" \
+  --output-dir "C:/Mine/SC Files/Grad/MY-COURSE/Review/Provenance/Lecture 01" \
+  --note-output "C:/Mine/SC Files/Grad/MY-COURSE/Notes/Lecture 01.md" \
+  --course MY-COURSE \
+  --lecture 1 \
+  --topic "Lecture topic" \
+  --note-model deepseek-v4-pro
+```
+
+The transcript-review stage is a semantic text review. It does **not** claim
+waveform-level audio fidelity by itself; use an independent local Whisper
+spot-check when a word-for-word audio judgment matters. The stage invokes
+Hermes one-shot mode with
+`--provider openai-codex --model gpt-5.6-luna`; it does not treat Codex OAuth as
+a generic DeepSeek API endpoint. Use `--note-model deepseek-v4-flash` only for
+an explicit lower-cost draft/bulk pass. Pro remains the default for final
+technical notes and fact checking; the production ingestion preflight still
+requires Pro before a generated artifact is treated as final KB material.
+
+Expected artifacts include:
+
+```text
+<stem>.transcript-review.json   # deterministic checks + Luna findings
+<stem>.verified.txt             # raw text plus only safe exact-match fixes
+<stem>.notes.md                  # DeepSeek-generated notes
+<stem>.sources.md                # verified transcript/source material
+<stem>.audio-to-notes.json      # routing, provenance, and status manifest
+```
+
+No OpenViking or Hindsight write is performed by this command. Indexing remains
+an explicit downstream operation.
 
 ### Switch local Ollama models
 
@@ -255,13 +322,13 @@ Build the ignored local lexical index from your approved manifest, then use the 
 
 ```bash
 python scripts/ingestion/source_manifest.py rebuild-index \
-  --manifest config/manifests/my-course.json \
-  --root . \
-  --index-path data/lexical_index.json
+  --manifest "C:/Mine/SC Files/Grad/MY-COURSE/Review/Provenance/MY-COURSE-manifest.json" \
+  --root "C:/Mine/SC Files/Grad" \
+  --index-path "C:/Mine/SC Files/Grad/MY-COURSE/Review/Provenance/lexical_index.json"
 
 python scripts/retrieval/search.py health
 python scripts/retrieval/search.py hybrid "closed loop stability" \
-  --index-path data/lexical_index.json
+  --index-path "C:/Mine/SC Files/Grad/MY-COURSE/Review/Provenance/lexical_index.json"
 ```
 
 ### 4. Sync notes to Obsidian
@@ -270,7 +337,8 @@ Preview a sync without writing to the vault:
 
 ```bash
 python scripts/ops/obsidian_sync.py \
-  --source-root courses \
+  --source-root "C:/Mine/SC Files/Grad" \
+  --pattern "**/Notes/**/*.md" \
   --vault-root ~/obsidian-vault \
   --once \
   --dry-run
@@ -288,7 +356,8 @@ The project uses local defaults and environment overrides. Set only the values n
 | `CORNELL_KB_HINDSIGHT_URL` | Hindsight HTTP endpoint | `http://127.0.0.1:8888` |
 | `CORNELL_KB_EMBEDDING_URL` | Embedding service health endpoint | `http://127.0.0.1:8001` |
 | `CORNELL_KB_OLLAMA_URL` | Ollama generation endpoint | `http://127.0.0.1:11434/api/generate` |
-| `CORNELL_KB_OUTPUT_DIR` | Default media artifact directory | `data/artifacts/media` |
+| `CORNELL_KB_COURSE_ROOT` | Syncthing-managed course-material root | `C:/Mine/SC Files/Grad` |
+| `CORNELL_KB_OUTPUT_DIR` | Explicit fallback media artifact directory | `<course root>/_unassigned/Review` |
 | `CORNELL_KB_WHISPER_DEVICE` | Whisper device selection | `cuda` |
 | `CORNELL_KB_WHISPER_COMPUTE_TYPE` | Whisper compute type | `float16` |
 | `CORNELL_KB_OLLAMA_SSH_TARGET` | Optional `user@host` for remote Ollama startup | unset; launch locally |

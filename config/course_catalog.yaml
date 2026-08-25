@@ -1,5 +1,5 @@
 courses:
-  # === FALL 2026 (19 credits) ===
+  # === FALL 2026 (16 credits) ===
 
   SYSEN 5100:
     name: "Model-Based Systems Engineering"
@@ -48,16 +48,17 @@ courses:
       - factory layout
       - production systems
 
-  SYSEN 5680:
-    name: "Optimal Control and Decision Theory"
+  ENGRG 5350:
+    name: "Career Search and Exploration for Engineers"
     semester: "Fall 2026"
-    credits: 4
-    lectures: 28
+    credits: 1
     topics:
-      - energy systems
-      - artificial intelligence
-      - systems modeling
-      - optimization and decision support
+      - career planning
+      - job search strategies
+      - application materials
+      - professional networking
+      - interview communication
+      - offer negotiation
 
   # === SPRING 2027 (19 credits) ===
 
