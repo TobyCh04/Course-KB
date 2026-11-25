@@ -1,6 +1,6 @@
-# Cornell-KB
+# Course-KB
 
-Cornell-KB is a source-grounded study pipeline for turning course material into searchable notes, retrieval artifacts, and Obsidian pages. It combines deterministic manifests and provenance checks with optional OpenViking, Hindsight, LLM, and local media-model integrations.
+Course-KB is a source-grounded study pipeline for turning course material into searchable notes, retrieval artifacts, and Obsidian pages. It combines deterministic manifests and provenance checks with optional OpenViking, Hindsight, LLM, and local media-model integrations.
 
 The repository is designed to be useful in two modes:
 
@@ -143,7 +143,7 @@ MOSS transcription has its own upstream install step and is optional. The defaul
 
 ## Switching models and providers
 
-There is no single global model switch. Cornell-KB has separate model roles, and
+There is no single global model switch. Course-KB has separate model roles, and
 the supported switch depends on which stage you are running:
 
 | Stage | Current route | How to switch |
